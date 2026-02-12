@@ -1,0 +1,20 @@
+# AWS Anahtarları (BUNU SAKIN SİLME)
+*.pem
+*.key
+
+# Adli İmaj Dosyaları (Çok büyükler, GitHub almaz)
+*.img
+*.img.gz
+*.dd
+*.E01
+
+# Python Gereksizleri
+__pycache__/
+*.pyc
+.env
+venv/
+.idea/
+.vscode/
+
+# İşletim Sistemi Dosyaları
+.DS_Store
