@@ -30,7 +30,7 @@
    <widget class="QLineEdit" name="txt_examiner">
     <property name="geometry">
      <rect>
-      <x>400</x>
+      <x>402</x>
       <y>2</y>
       <width>381</width>
       <height>27</height>

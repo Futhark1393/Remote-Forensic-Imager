@@ -16,14 +16,18 @@ venv/
 .idea/
 .vscode/
 
-# İşletim Sistemi Dosyaları
+# İşletim Sistemi ve Editör Yedekleri (Fedora/Linux)
 .DS_Store
+*~
+*.swp
+*.swo
 
-# Forensic Reports
+# Forensic Reports & Logs
 Report_*.txt
 *.log
+live_forensic.log
 
-# Evidence Images
+# Evidence Images & Test Files
 evidence_*
-*.img.gz
-*.dd
+secret_evidence.txt
+evidence_file.txt
