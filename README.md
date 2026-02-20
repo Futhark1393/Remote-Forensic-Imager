@@ -1,36 +1,29 @@
 # 🕵️‍♂️ Remote Forensic Imager
 
-**Remote Forensic Imager** is a Python-based digital forensic tool developed to perform live disk and volatile memory (RAM) acquisition from remote servers (AWS EC2, VPS, etc.) over encrypted channels. 
+**Remote Forensic Imager** is a professional Python-based digital forensic tool designed for secure live disk and memory acquisition from remote servers (AWS EC2, VPS, etc.) over encrypted SSH channels.
 
-Designed for incident responders and forensic examiners, the tool automates the process of collecting bit-stream images while maintaining a strict **Chain of Custody (CoC)**, ensuring data integrity, and adhering to the **"Do No Harm"** forensic principle.
+[cite_start]Developed by **Futhark1393**, the tool automates the collection of bit-stream images while maintaining a strict **Chain of Custody (CoC)** and adhering to the **"Do No Harm"** forensic principle[cite: 1, 2, 4].
 
 ![GUI Preview](screenshots/gui_preview.png)
 
 ## 🚀 Technical Capabilities
 
-* **Auto-Discovery (New):** Probes the remote server via single-shot SSH (`lsblk`) to display the physical disk layout directly in the console, preventing the need for an interactive shell.
-* **Live Triage (Fast Recon):** Executes rapid volatile data collection (active network connections, running processes, logged-in users, and kernel logs) before starting the main disk acquisition.
-* **Bandwidth Throttling:** Integrates with `pv` (Pipe Viewer) to limit network bandwidth usage (MB/s) during acquisition, preventing production server bottlenecks.
-* **Interactive Tooltips (Help):** Embedded forensic guidance for examiners on hover for all UI elements.
-* **Live RAM (Memory) Acquisition:** Capable of extracting volatile memory directly from `/proc/kcore`. Bypasses physical write-blockers safely.
-* **Software Write Blocker:** Capable of toggling the remote block device to **Read-Only (RO)** mode at the kernel level (`blockdev --setro`).
-* **Live Bad Sector Logging:** Monitors `dd` output in real-time to detect and log **I/O errors (Bad Sectors)**.
-* **Secure Remote Acquisition:** Establishes encrypted SSH tunnels for secure data transfer.
-* **Automated Chain of Custody:** Generates a forensic report (`.txt`) immediately after acquisition.
-* **Integrity Verification:** Calculates SHA-256 hash values (Digital Seal) automatically.
-
-### 🔍 Auto-Detect Feature
-![Auto Detect](screenshots/auto_detect.png)
+* [cite_start]**Auto-Discovery:** Probes the remote server via single-shot SSH (`lsblk`) to display the physical disk layout directly in the console.
+* [cite_start]**Live Triage:** Executes rapid volatile data collection (network connections, processes, logs) before disk acquisition.
+* [cite_start]**Bandwidth Throttling:** Integrates with `pv` (Pipe Viewer) to limit transfer speeds and prevent network bottlenecks.
+* [cite_start]**Dual-Hash Verification:** Automatically calculates both **SHA-256** and **MD5** digital signatures for evidence integrity[cite: 4].
+* [cite_start]**Software Write Blocker:** Sets the target block device to **Read-Only (RO)** mode at the kernel level (`blockdev --setro`).
+* [cite_start]**Multi-Format Reporting:** Generates technical `.txt` logs and professional `.pdf` Executive Summaries in multiple languages (EN/TR)[cite: 4].
 
 ---
 
 ## 🏗️ Modular Architecture
 
-The tool is built with a highly modular architecture (Separation of Concerns) to ensure stability and future scalability:
-* `main_qt6.py` - The main application launcher.
-* `codes/gui.py` - Manages the PyQt6 interface and user interactions.
-* `codes/acquisition.py` - Handles the SSH tunneling, `dd` streaming, throttling, and Triage execution.
-* `codes/analysis.py` - Performs post-acquisition tasks like SHA-256 hashing and Zip Bomb detection.
+[cite_start]The tool is built with a highly modular structure:
+* `main_qt6.py`: Application entry point.
+* [cite_start]`codes/gui.py`: Manages the PyQt6 interface and PDF reporting engine[cite: 4].
+* [cite_start]`codes/acquisition.py`: Handles SSH tunneling, `dd` streaming, and Triage.
+* [cite_start]`codes/analysis.py`: Performs SHA-256/MD5 hashing and binary header analysis[cite: 4].
 
 ---
 
@@ -38,65 +31,48 @@ The tool is built with a highly modular architecture (Separation of Concerns) to
 
 ### 1. Target Preparation (Remote Side)
 Connect to your remote instance and place a "secret" evidence file:
-
-````bash
-# Connect to your test server
+```bash
 ssh -i your-key.pem ubuntu@remote-ip
-
-# Inject evidence data
-echo "CONFIDENTIAL_DATA_FOUND_BY_FUTHARK1393" > evidence_file.txt
-````
+echo "CONFIDENTIAL_DATA_FUTHARK1393" > evidence.txt
+```
 
 ### 2. Evidence Collection (Local Side)
-1. Run the application: `python3 main_qt6.py`
-2. Enter the **Case Number**, **Examiner Name**, **Target IP**, and **SSH Key**.
-3. Click **"Auto-Detect"** to securely probe the target's disk layout without spawning an interactive shell. Review the log and type the target disk (e.g., `/dev/nvme0n1`).
-4. **(Optional)** Check **"Run Live Triage"** to collect fast volatile system data.
-5. **(Optional)** Check **"Limit Bandwidth"** and set a limit (e.g., `5` MB/s).
-6. **(Optional)** Check **"Enable Software Write Blocker"** for kernel-level protection.
-7. Click **"Take Image and Analyze"** to start the transfer.
-
-### 3. Forensic Validation
-````bash
-# 1. Lock the evidence (Local Write-Blocking)
-chmod 444 evidence_*.img.gz
-
-# 2. Verify Digital Seal (Hash Check)
-sha256sum evidence_*.img.gz
-
-# 3. Keyword Search (Content Analysis)
-zgrep -a "CONFIDENTIAL_DATA" evidence_*.img.gz
-````
+1. [cite_start]Run the application: `python3 main_qt6.py`.
+2. [cite_start]Click **"Auto-Detect"** to identify the remote disks.
+3. Enter the target disk (e.g., `/dev/nvme0n1p1`).
+4. [cite_start]Click **"Take Image and Analyze"** to start the process.
+5. [cite_start]Select the report language (EN/TR) from the popup menu[cite: 4].
 
 ---
 
-## 🛡️ Automated Documentation & Crash-Proof Logging
+## 🔗 Chain of Custody (CoC) Protocol
 
-The system generates an official **Forensic Acquisition Report** for every session. Additionally, it maintains a real-time `live_forensic.log` file to preserve operation logs even in case of a system crash.
+In digital forensics, the **Chain of Custody** is the documentation recording the sequence of custody and transfer of evidence. This tool enforces CoC through:
+1.  [cite_start]**Identification:** Logs exact IP, SSH fingerprints, and timestamps.
+2.  [cite_start]**Preservation:** Enforces Read-Only modes and secures images with Dual-Hash signatures[cite: 1, 4].
+3.  [cite_start]**Documentation:** Automatically generates a CoC report mapping the transfer from the target to the examiner.
+
+> [cite_start]**⚖️ NIST Compliance:** The acquisition methodology aligns with **NIST Special Publication 800-86** guidelines for verifiable data collection and cryptographic preservation[cite: 4].
 
 ---
 
-## 🛠️ Environment & Installation
+## 🛠️ Installation & Requirements
 
-* **Development OS:** Fedora 43 Workstation (KDE Plasma)
+* [cite_start]**OS:** Fedora 43 (KDE Plasma) [cite: 3]
 * **Language:** Python 3.10+
-* **Dependencies:** `PyQt6`, `pv` (Pipe Viewer)
+* [cite_start]**Dependencies:** `PyQt6`, `fpdf2`, `pv` [cite: 1, 4]
 
-````bash
-# 1. Install system dependency for bandwidth throttling (Fedora)
+```bash
+# Install dependencies
 sudo dnf install pv
+pip install PyQt6 fpdf2
 
-# 2. Clone and Run
-git clone [https://github.com/Futhark1393/Remote-Forensic-Imager.git](https://github.com/Futhark1393/Remote-Forensic-Imager.git)
-cd Remote-Forensic-Imager
-pip install PyQt6
+# Run
 python3 main_qt6.py
-````
+```
 
-## ⚠️ Disclaimer
-
-This tool includes features that interact with the remote kernel (`blockdev` and `/proc/kcore`). While it implements safety mechanisms, it is intended for **authorized forensic investigations** only. The developer (**Futhark1393**) assumes no liability for unauthorized access or misuse.
+## ⚠️ Important Note
+When acquiring RAM via `/proc/kcore`, the virtual file size may appear extremely large (TB range). It is recommended to use `dd` with specific block counts or target physical memory offsets to avoid excessive data transfer[cite: 4].
 
 ---
-
-**Developed by Futhark1393**
+**Developed by Futhark1393** [cite: 2]
