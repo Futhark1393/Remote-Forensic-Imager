@@ -1,6 +1,8 @@
 import sys
+import os
+import subprocess
 from datetime import datetime
-from PyQt6.QtWidgets import QMainWindow, QFileDialog, QMessageBox
+from PyQt6.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QApplication
 from PyQt6.uic import loadUi
 from PyQt6.QtGui import QTextCursor
 
@@ -16,15 +18,19 @@ class ForensicApp(QMainWindow):
             QMessageBox.critical(self, "Error", f"UI file could not be loaded!\n{e}")
             sys.exit(1)
 
-        self.setWindowTitle("Remote Forensic Imager - Futhark1393")
+        self.setWindowTitle("Remote Forensic Imager")
         self.setup_terminal_style()
         self.setup_tooltips()
 
         self.btn_file.clicked.connect(self.select_key)
         self.btn_start.clicked.connect(self.start_process)
 
+        # Connect the Auto-Discovery button if it exists
+        if hasattr(self, 'btn_discover'):
+            self.btn_discover.clicked.connect(self.discover_disks)
+
         self.txt_user.setText("ubuntu")
-        self.txt_disk.setText("/dev/nvme0n1")
+        self.txt_disk.setText("") # Start empty, let the examiner decide
 
         if hasattr(self, 'chk_safety'):
             self.chk_safety.setChecked(True)
@@ -75,6 +81,8 @@ class ForensicApp(QMainWindow):
             self.chk_triage.setToolTip("Executes rapid volatile data collection (connections, processes, logs) before disk acquisition.")
         if hasattr(self, 'btn_start'):
             self.btn_start.setToolTip("Start secure acquisition and post-process hashing.")
+        if hasattr(self, 'btn_discover'):
+            self.btn_discover.setToolTip("Probes the remote server via single-shot SSH to fetch the target's physical disk layout.")
 
     def select_key(self):
         """Opens a file dialog to select the SSH private key."""
@@ -95,6 +103,46 @@ class ForensicApp(QMainWindow):
                 f.write(f"[{timestamp}] {msg}\n")
         except Exception:
             pass
+
+    def discover_disks(self):
+        """Probes the remote server and displays disk layout in the log without auto-filling."""
+        ip = self.txt_ip.text().strip()
+        user = self.txt_user.text().strip()
+        key = self.txt_key.text().strip()
+
+        if not ip or not key or not user:
+            QMessageBox.warning(self, "Missing Info", "Please enter IP, User, and SSH Key first to discover disks.")
+            return
+
+        if os.path.exists(key):
+            os.chmod(key, 0o400)
+        else:
+            self.log("[!] SSH Key file not found!")
+            return
+
+        self.log("\n[*] Probing remote server for block devices (lsblk)...")
+        if hasattr(self, 'btn_discover'):
+            self.btn_discover.setEnabled(False)
+        QApplication.processEvents() # Prevents UI freezing
+
+        try:
+            # Simple, fail-proof lsblk command for single-shot execution
+            cmd = f"ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i {key} {user}@{ip} 'lsblk -o NAME,SIZE,TYPE,MOUNTPOINT'"
+            result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode('utf-8').strip()
+
+            self.log("\n=== REMOTE DISK LAYOUT ===")
+            self.log(result)
+            self.log("==========================\n")
+            self.log("[*] Please review the layout above and type the target disk manually (e.g., /dev/nvme0n1).")
+
+        except subprocess.CalledProcessError as e:
+            self.log("[ERROR] Disk discovery failed. Check SSH connection and key permissions.")
+            self.log(f"[DETAILS] {e.output.decode('utf-8').strip()}")
+        except Exception as e:
+            self.log(f"[ERROR] Discovery Error: {str(e)}")
+        finally:
+            if hasattr(self, 'btn_discover'):
+                self.btn_discover.setEnabled(True)
 
     def start_process(self):
         """Validates inputs and starts the acquisition thread."""
@@ -126,8 +174,8 @@ class ForensicApp(QMainWindow):
         if is_ram_status:
              disk = "/proc/kcore"
 
-        if not ip or not key or not user:
-            QMessageBox.warning(self, "Missing Info", "Please fill all required fields!")
+        if not ip or not key or not user or not disk:
+            QMessageBox.warning(self, "Missing Info", "Please fill all required fields, including Target Disk!")
             return
 
         self.btn_start.setEnabled(False)
