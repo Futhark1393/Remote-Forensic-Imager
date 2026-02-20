@@ -1,8 +1,9 @@
-# AWS Anahtarları (BUNU SAKIN SİLME)
+cat <<EOF > .gitignore
+# AWS Anahtarları
 *.pem
 *.key
 
-# Adli İmaj Dosyaları (Çok büyükler, GitHub almaz)
+# Adli İmaj Dosyaları
 *.img
 *.img.gz
 *.dd
@@ -16,7 +17,7 @@ venv/
 .idea/
 .vscode/
 
-# İşletim Sistemi ve Editör Yedekleri (Fedora/Linux)
+# İşletim Sistemi ve Editör Yedekleri
 .DS_Store
 *~
 *.swp
@@ -31,3 +32,4 @@ live_forensic.log
 evidence_*
 secret_evidence.txt
 evidence_file.txt
+EOF
