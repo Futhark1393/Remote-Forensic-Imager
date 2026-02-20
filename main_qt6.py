@@ -9,13 +9,13 @@ from PyQt6.QtCore import QThread, pyqtSignal, Qt
 from PyQt6.QtGui import QTextCursor
 
 # ==========================================
-# WORKER 1: DISK IMAGE ACQUISITION (SAFE & PRO)
+# WORKER 1: DISK & RAM ACQUISITION (PRO)
 # ==========================================
 class AcquisitionThread(QThread):
     log_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str, dict)
 
-    def __init__(self, ip, user, key, disk, safe_mode, write_block):
+    def __init__(self, ip, user, key, disk, safe_mode, write_block, is_ram):
         super().__init__()
         self.ip = ip
         self.user = user
@@ -23,12 +23,20 @@ class AcquisitionThread(QThread):
         self.disk = disk
         self.safe_mode = safe_mode
         self.write_block = write_block
+        self.is_ram = is_ram
         self.start_time = None
         self.end_time = None
         self.bad_sector_logs = []
-        self.filename = f"evidence_{datetime.now().strftime('%Y%m%d_%H%M%S')}.img.gz"
+
+        # Set filename and extension based on acquisition type
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        if self.is_ram:
+            self.filename = f"memory_evidence_{timestamp}.kcore.gz"
+        else:
+            self.filename = f"evidence_{timestamp}.img.gz"
 
     def get_ssh_fingerprint(self):
+        """Fetches remote server SSH fingerprint."""
         try:
             cmd = f"ssh-keyscan -t rsa {self.ip} 2>/dev/null"
             output = subprocess.check_output(cmd, shell=True).decode().strip()
@@ -37,66 +45,67 @@ class AcquisitionThread(QThread):
             return "Fingerprint fetch failed."
 
     def set_write_block(self, state):
-        """
-        state=True  -> Salt Okunur (RO) yapar.
-        state=False -> Yazılabilir (RW) yapar.
-        """
+        """Toggles Read-Only mode on block devices. Not applicable for RAM."""
         mode = "--setro" if state else "--setrw"
         mode_str = "Read-Only" if state else "Read-Write"
-        
+
         try:
-            # 1. Komutu Gönder
             cmd_lock = f"ssh -o StrictHostKeyChecking=no -i {self.key} {self.user}@{self.ip} 'sudo blockdev {mode} {self.disk}'"
             subprocess.check_call(cmd_lock, shell=True)
-            
-            # 2. Doğrula (0=RW, 1=RO)
+
             cmd_check = f"ssh -o StrictHostKeyChecking=no -i {self.key} {self.user}@{self.ip} 'sudo blockdev --getro {self.disk}'"
             result = subprocess.check_output(cmd_check, shell=True).decode().strip()
-            
+
             expected = "1" if state else "0"
             if result == expected:
                 return True, f"Disk set to {mode_str} mode."
             else:
                 return False, f"Failed to set {mode_str} mode!"
-                
+
         except Exception as e:
             return False, f"Write Blocker Error: {str(e)}"
 
     def run(self):
         self.start_time = datetime.now()
+        acq_type = "Live Memory (RAM)" if self.is_ram else "Block Device (Disk)"
+
         report_data = {
             "start_time": self.start_time.strftime("%Y-%m-%d %H:%M:%S"),
             "target_ip": self.ip,
             "ssh_fingerprint": "N/A",
             "command_executed": "N/A",
             "write_protection": "N/A",
+            "acquisition_type": acq_type,
             "duration": "0s",
             "bad_sectors": []
         }
 
-        # Kilit aktif edildi mi bayrağı (Finally bloğu için)
         wb_activated = False
 
         try:
             self.log_signal.emit(f"[*] Task Started at: {report_data['start_time']}")
             self.log_signal.emit(f"[*] Target Connection: {self.ip}")
-            
-            # 1. SSH Fingerprint
+            self.log_signal.emit(f"[*] Acquisition Mode: {acq_type}")
+
+            # 1. SSH Fingerprint Check
             fingerprint = self.get_ssh_fingerprint()
             report_data["ssh_fingerprint"] = fingerprint
             self.log_signal.emit(f"[*] Remote SSH Fingerprint Verified:\n    {fingerprint}")
 
-            # 2. Key Kontrolü
+            # 2. Key Permission Enforce
             if os.path.exists(self.key):
                 os.chmod(self.key, 0o400)
             else:
                 self.finished_signal.emit(False, "SSH Key file not found!", report_data)
                 return
 
-            # 3. WRITE BLOCKER AKTİVASYONU (Başlangıç)
-            if self.write_block:
+            # 3. Write Blocker Activation (Bypass for RAM)
+            if self.is_ram:
+                self.log_signal.emit("[*] Write Blocker bypassed (Not applicable for virtual memory files).")
+                report_data["write_protection"] = "N/A (Memory Acquisition)"
+            elif self.write_block:
                 self.log_signal.emit("[*] Activating Software Write Blocker (Kernel Level)...")
-                success, msg = self.set_write_block(True) # True = Kilitle
+                success, msg = self.set_write_block(True)
                 if success:
                     self.log_signal.emit(f"[SUCCESS] {msg}")
                     report_data["write_protection"] = "Active (Kernel Level - blockdev --setro)"
@@ -107,17 +116,15 @@ class AcquisitionThread(QThread):
             else:
                 report_data["write_protection"] = "Disabled (Live System Mode)"
 
-            # --- GÜVENLİ BLOK BAŞLANGICI ---
-            # Buradaki kod ne olursa olsun (hata, başarı) finally bloğu çalışacak
             try:
-                # 4. İmaj Alma Komutu
+                # 4. Prepare Acquisition Command
                 dd_flags = "conv=noerror,sync" if self.safe_mode else ""
                 ssh_cmd = [
                     "ssh", "-o", "StrictHostKeyChecking=no", "-i", self.key,
                     f"{self.user}@{self.ip}",
                     f"sudo dd if={self.disk} bs=64K {dd_flags} status=progress | gzip -1 -"
                 ]
-                
+
                 full_command_str = " ".join(ssh_cmd)
                 report_data["command_executed"] = full_command_str
 
@@ -126,7 +133,7 @@ class AcquisitionThread(QThread):
 
                 with open(self.filename, "wb") as f:
                     process = subprocess.Popen(ssh_cmd, stdout=f, stderr=subprocess.PIPE)
-                    
+
                     while True:
                         line = process.stderr.readline()
                         if not line and process.poll() is not None:
@@ -152,15 +159,14 @@ class AcquisitionThread(QThread):
                     self.finished_signal.emit(True, self.filename, report_data)
 
             finally:
-                # --- [ÖNEMLİ] KİLİDİ KALDIRMA (TEMİZLİK) ---
+                # 5. Lock Restoration
                 if wb_activated:
                     self.log_signal.emit("[*] Reverting Write Blocker (Restoring Read-Write)...")
-                    success, msg = self.set_write_block(False) # False = Kilidi Aç
+                    success, msg = self.set_write_block(False)
                     if success:
                         self.log_signal.emit(f"[INFO] System Restored: {msg}")
                     else:
-                        self.log_signal.emit(f"[!!!] CRITICAL WARNING: Could not restore RW mode! Manual intervention required.")
-            # --- GÜVENLİ BLOK BİTİŞİ ---
+                        self.log_signal.emit(f"[!!!] CRITICAL WARNING: Could not restore RW mode!")
 
         except Exception as e:
             self.finished_signal.emit(False, str(e), report_data)
@@ -195,7 +201,7 @@ class AnalysisThread(QThread):
             cmd = f"grep -aPc '\\x50\\x4B\\x03\\x04' {self.filename}"
             result = subprocess.check_output(cmd, shell=True).decode().strip()
             zip_count = int(result) if result.isdigit() else 0
-            
+
             warning_msg = ""
             if zip_count > 1000:
                 self.log_signal.emit("[!!!] THREAT DETECTED: Potential Zip Bomb structure.")
@@ -218,18 +224,21 @@ class ForensicApp(QMainWindow):
         try:
             loadUi("forensic_qt6.ui", self)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"UI Dosyası Yüklenemedi!\n{e}")
+            QMessageBox.critical(self, "Error", f"UI file could not be loaded!\n{e}")
             sys.exit(1)
 
-        self.setWindowTitle("Remote Forensic Imager - Professional Edition")
+        self.setWindowTitle("Remote Forensic Imager - Futhark1393")
         self.setup_terminal_style()
 
         self.btn_file.clicked.connect(self.select_key)
         self.btn_start.clicked.connect(self.start_process)
-        
+
         self.txt_user.setText("ubuntu")
         self.txt_disk.setText("/dev/nvme0n1")
-        self.chk_safety.setChecked(True)
+
+        if hasattr(self, 'chk_safety'):
+            self.chk_safety.setChecked(True)
+
         self.progressBar.setValue(0)
         self.last_report_data = {}
 
@@ -257,8 +266,8 @@ class ForensicApp(QMainWindow):
         cursor = self.txt_log.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         self.txt_log.setTextCursor(cursor)
-        
-        # Crash-Proof Log
+
+        # Crash-Proof Logging
         try:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with open("live_forensic.log", "a", encoding="utf-8") as f:
@@ -271,45 +280,54 @@ class ForensicApp(QMainWindow):
         user = self.txt_user.text()
         key = self.txt_key.text()
         disk = self.txt_disk.text()
-        
+
         self.case_no = self.txt_caseno.text() if hasattr(self, 'txt_caseno') else "UNKNOWN_CASE"
         self.examiner = self.txt_examiner.text() if hasattr(self, 'txt_examiner') else "UNKNOWN_EXAMINER"
 
+        # Check Write Blocker status
         write_block_status = False
         if hasattr(self, 'chk_writeblock'):
              write_block_status = self.chk_writeblock.isChecked()
-        else:
-             self.log("[INFO] UI does not have 'chk_writeblock'. Feature disabled.")
+
+        # Check RAM Acquisition status
+        is_ram_status = False
+        if hasattr(self, 'chk_ram'):
+             is_ram_status = self.chk_ram.isChecked()
+
+        # Force target to memory file if RAM mode is selected
+        if is_ram_status:
+             disk = "/proc/kcore"
 
         if not ip or not key or not user:
-            QMessageBox.warning(self, "Eksik Bilgi", "Lütfen tüm zorunlu alanları doldurun!")
+            QMessageBox.warning(self, "Missing Info", "Please fill all required fields!")
             return
 
         self.btn_start.setEnabled(False)
         self.progressBar.setValue(5)
         self.log("\n--- [ STARTING FORENSIC ACQUISITION ] ---")
         self.log(f"[*] Case No: {self.case_no} | Examiner: {self.examiner}")
-        self.log(f"[*] Write Blocker Requested: {write_block_status}")
-        
-        self.worker = AcquisitionThread(ip, user, key, disk, self.chk_safety.isChecked(), write_block_status)
+
+        safe_mode_status = self.chk_safety.isChecked() if hasattr(self, 'chk_safety') else False
+
+        self.worker = AcquisitionThread(ip, user, key, disk, safe_mode_status, write_block_status, is_ram_status)
         self.worker.log_signal.connect(self.log)
         self.worker.finished_signal.connect(self.on_acquisition_finished)
         self.worker.start()
 
     def on_acquisition_finished(self, success, filename, report_data):
         self.last_report_data = report_data
-        
+
         if success:
             self.progressBar.setValue(50)
-            self.log(f"[INFO] Image Acquired: {filename}")
-            
+            self.log(f"[INFO] Data Acquired: {filename}")
+
             self.analyzer = AnalysisThread(filename)
             self.analyzer.log_signal.connect(self.log)
             self.analyzer.finished_signal.connect(self.on_analysis_finished)
             self.analyzer.start()
         else:
-            self.log(f"[ERROR] {filename}")
-            QMessageBox.critical(self, "İşlem Başarısız", filename)
+            self.log(f"[ERROR] Process failed for {filename}")
+            QMessageBox.critical(self, "Process Failed", filename)
             self.btn_start.setEnabled(True)
             self.progressBar.setValue(0)
 
@@ -317,14 +335,14 @@ class ForensicApp(QMainWindow):
         self.progressBar.setValue(100)
         self.btn_start.setEnabled(True)
         self.generate_report(file_hash)
-        
+
         self.log("\n--- [ TASK COMPLETED SUCCESSFULLY ] ---")
         self.log(f"[*] Report Created: Report_{self.case_no}_{datetime.now().strftime('%Y%m%d')}.txt")
-        
+
         if warning:
             QMessageBox.warning(self, "FORENSIC WARNING", warning)
         else:
-            QMessageBox.information(self, "Başarılı", "Adli İmaj Alma ve Analiz Tamamlandı.\nRapor Oluşturuldu.")
+            QMessageBox.information(self, "Success", "Acquisition & Analysis Complete.\nReport Generated.")
 
     def generate_report(self, file_hash):
         bad_sector_text = ""
@@ -343,29 +361,29 @@ Case Number    : {self.case_no}
 Examiner       : {self.examiner}
 Date           : {datetime.now().strftime("%Y-%m-%d")}
 Target IP      : {self.last_report_data['target_ip']}
-Target Disk    : {self.txt_disk.text()}
 
 ACQUISITION LOG:
 ----------------
-Start Time     : {self.last_report_data['start_time']}
-End Time       : {self.last_report_data['end_time']}
-Duration       : {self.last_report_data['duration']}
-SSH Fingerprint: {self.last_report_data['ssh_fingerprint']}
-Write Blocker  : {self.last_report_data['write_protection']}
+Acquisition Type: {self.last_report_data['acquisition_type']}
+Start Time      : {self.last_report_data['start_time']}
+End Time        : {self.last_report_data['end_time']}
+Duration        : {self.last_report_data['duration']}
+SSH Fingerprint : {self.last_report_data['ssh_fingerprint']}
+Write Blocker   : {self.last_report_data['write_protection']}
 
 COMMAND EXECUTED:
 -----------------
 {self.last_report_data['command_executed']}
 
-DISK HEALTH / ERROR LOGS:
+HEALTH / ERROR LOGS:
 -------------------------
 {bad_sector_text}
 
 EVIDENCE DETAILS:
 -----------------
-File Name      : {self.worker.filename}
-SHA-256 Hash   : {file_hash}
-Integrity      : VERIFIED
+File Name       : {self.worker.filename}
+SHA-256 Hash    : {file_hash}
+Integrity       : VERIFIED
 
 ================================================================
                   CHAIN OF CUSTODY (CoC)
@@ -376,7 +394,7 @@ Integrity      : VERIFIED
 | {self.last_report_data['end_time']} | {self.examiner:<18} | Secure Storage   | Evidence Locking    |
 |                     |                    |                  |                     |
 ================================================================
-Note: This document is auto-generated by Remote Forensic Imager.
+Note: Auto-generated by Remote Forensic Imager - Developed by Futhark
 """
         report_filename = f"Report_{self.case_no}_{datetime.now().strftime('%Y%m%d')}.txt"
         with open(report_filename, "w") as f:

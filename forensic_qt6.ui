@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>799</width>
-    <height>550</height>
+    <width>945</width>
+    <height>635</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -116,6 +116,13 @@
          </widget>
         </item>
         <item>
+         <widget class="QCheckBox" name="chk_ram">
+          <property name="text">
+           <string>Capture Live RAM (Memory)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QCheckBox" name="chk_writeblock">
           <property name="maximumSize">
            <size>
@@ -172,7 +179,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>799</width>
+     <width>945</width>
      <height>30</height>
     </rect>
    </property>
