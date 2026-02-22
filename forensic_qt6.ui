@@ -27,7 +27,7 @@
       <item>
        <widget class="QLineEdit" name="txt_examiner">
         <property name="placeholderText">
-         <string>Examiner Name (e.g., Kemal Futhark)</string>
+         <string>Examiner Name</string>
         </property>
        </widget>
       </item>
