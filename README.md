@@ -34,7 +34,7 @@ The tool is built with a highly modular structure to ensure stability and future
 
 ## 🔥 Proof of Concept: Data Carving & Bit-Stream Accuracy
 
-To verify that the tool performs a true physical (bit-stream) acquisition rather than just a logical file copy, a test was conducted on a 100MB AWS EC2 partition (`/dev/nvme0n1p15`). 
+To verify that the tool performs a true physical (bit-stream) acquisition rather than just a logical file copy, a test was conducted on a 8 GB AWS EC2 partition (`/dev/nvme0n1`). 
 
 The resulting `.E01` image was analyzed using **Autopsy**. During the analysis of the **Unallocated Space**, fragments of historical Linux documentation (a 1999 email from GNU FSF founder Richard Stallman regarding Readline libraries) were successfully carved and recovered. 
 
@@ -56,7 +56,7 @@ echo "CONFIDENTIAL_DATA_FOUND_BY_FUTHARK1393" > evidence.txt
 ### 2. Evidence Collection (Local Side)
 1. Run the application: `python3 main_qt6.py`.
 2. Click **"Auto-Detect"** to identify the remote disks.
-3. Enter the target disk (e.g., `/dev/nvme0n1p1`).
+3. Enter the target disk (e.g., `/dev/nvme0n1`).
 4. Click **"Take Image and Analyze"** to start the process.
 5. Select the **Output Directory** where evidence and reports will be saved.
 6. Choose the evidence format (**E01** or **RAW**) from the popup dialog.
