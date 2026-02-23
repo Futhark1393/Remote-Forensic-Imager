@@ -102,4 +102,9 @@ python3 main_qt6.py
 ```
 
 ---
+
+## ⚠️ Disclaimer & Legal Warning
+This tool is developed for educational purposes, incident response, and authorized digital forensic investigations. The author (**Futhark1393**) is not responsible for any misuse, data loss, or legal consequences resulting from the use of this software. Always ensure you have explicit, written permission from the system owner before performing any digital acquisition.
+
+---
 **Developed by Futhark1393**
