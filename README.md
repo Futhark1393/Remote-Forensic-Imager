@@ -56,6 +56,32 @@ chmod +x RFI_install.sh
 ./RFI_install.sh
 ```
 
+### ⚙️ Manual / Advanced Installation
+For forensic examiners who prefer to manually compile dependencies and audit the installation process:
+
+```bash
+# 1. Install system dependencies (Debian/Ubuntu)
+sudo apt update
+sudo apt install git autoconf automake libtool gcc python3-dev python3-pip -y
+
+# For Fedora (User Environment)
+sudo dnf install git autoconf automake libtool gcc python3-devel -y
+
+# 2. Compile and install libewf with Python bindings
+git clone [https://github.com/libyal/libewf.git](https://github.com/libyal/libewf.git)
+cd libewf
+./synclibs.sh
+./autogen.sh
+./configure --enable-python
+make
+sudo make install
+sudo ldconfig
+cd ..
+
+# 3. Install Python packages
+pip install PyQt6 fpdf2 paramiko qt-material
+```
+
 ### 🚀 Usage
 Once installed, launch the tool from your terminal or application menu:
 * **Terminal:** Type `rfi` and hit Enter.
