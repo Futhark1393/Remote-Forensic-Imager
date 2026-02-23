@@ -58,48 +58,62 @@ The tool is built with a highly decoupled structure:
 
 ## 🛠️ Environment & Installation
 
-* **Supported OS:** Fedora Linux 43 (KDE Plasma), Ubuntu, CAINE, and other major Linux distributions.
+* **Supported OS:** Fedora Linux, Ubuntu, CAINE, and other major Linux distributions.
 * **Language:** Python 3.10+
-* **Dependencies:** `PyQt6`, `fpdf2`, `paramiko`
+* **Dependencies:** `PyQt6`, `fpdf2`, `paramiko`, `libewf`
 
-### 1. Clone the Repository
+### ⚡ Automated Installation (Recommended)
+The easiest way to install all dependencies, compile the `libewf` C-library for E01 support, and set up system-wide shortcuts is by using the provided automated script.
+
 ```bash
+# 1. Clone the repository
 git clone [https://github.com/Futhark1393/Remote-Forensic-Imager.git](https://github.com/Futhark1393/Remote-Forensic-Imager.git)
 cd Remote-Forensic-Imager
+
+# 2. Run the automated installer
+chmod +x RFI_install.sh
+./RFI_install.sh
 ```
 
-### 2. Install Python Dependencies
+### 🚀 Usage
+Once installed via the automated script, you can launch the tool from anywhere:
+* **Terminal:** Simply type `rfi` and hit Enter.
+* **GUI:** Search for **"Remote Forensic Imager"** in your desktop application menu (KDE/GNOME launcher).
+
+---
+
+### ⚙️ Manual Installation (Advanced Users)
+If you prefer to set up the environment manually without the installer script:
+
 ```bash
+# 1. Install Python Dependencies
 pip install PyQt6 fpdf2 paramiko
-```
 
-### 3. Install libewf for E01 Support (Fedora)
-To utilize the E01 format, the `libewf` C library and its Python bindings (`pyewf`) must be compiled from source.
-
-```bash
-# Install build tools and dependencies
+# 2. Install build tools (Fedora example)
 sudo dnf install gcc gcc-c++ make python3-devel zlib-devel openssl-devel
 
-# Download and extract libewf (Experimental 20240506 or later)
+# 3. Download and compile libewf for E01 Support (Experimental 20240506 or later)
 wget [https://github.com/libyal/libewf/releases/download/20240506/libewf-experimental-20240506.tar.gz](https://github.com/libyal/libewf/releases/download/20240506/libewf-experimental-20240506.tar.gz)
 tar -zxvf libewf-experimental-20240506.tar.gz
 cd libewf-20240506/
-
-# Compile with Python support and install to the core system path
 ./configure --prefix=/usr --enable-shared --enable-python
 make
 sudo make install
 
-# Ensure shared libraries are correctly placed and update linker cache
+# 4. Ensure shared libraries are correctly placed and update linker cache
 cd libewf/.libs/
-sudo cp -a libewf.so* /usr/lib64/
+sudo cp -a libewf.so* /usr/lib64/  # Use /usr/lib/ for Ubuntu/Debian
 sudo ldconfig
-```
 
-### 4. Launch the Console
-```bash
+# 5. Launch the tool
+cd ../../
 python3 main_qt6.py
 ```
+
+---
+
+## ⚠️ Disclaimer & Legal Warning
+This tool is developed for educational purposes, incident response, and authorized digital forensic investigations. The author (**Futhark1393**) is not responsible for any misuse, data loss, or legal consequences resulting from the use of this software. Always ensure you have explicit, written permission from the system owner before performing any digital acquisition.
 
 ---
 **Developed by Futhark1393**
