@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Remote Forensic Imager v2.1 (Enterprise Edition)</string>
+   <string>Remote Forensic Imager</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
@@ -77,8 +77,16 @@
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_disk">
            <item>
-            <widget class="QLineEdit" name="txt_disk">
-             <property name="placeholderText"><string>e.g., /dev/nvme0n1p1</string></property>
+            <widget class="QComboBox" name="cmb_disk">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="editable">
+              <bool>true</bool>
+             </property>
             </widget>
            </item>
            <item><widget class="QPushButton" name="btn_discover"><property name="text"><string>Auto-Detect (lsblk)</string></property></widget></item>
@@ -95,8 +103,31 @@
          <item><widget class="QCheckBox" name="chk_safety"><property name="text"><string>Safe Mode (Ignore Errors)</string></property></widget></item>
          <item><widget class="QCheckBox" name="chk_ram"><property name="text"><string>Capture Live RAM (Memory)</string></property></widget></item>
          <item><widget class="QCheckBox" name="chk_writeblock"><property name="text"><string>Enable Kernel Write-Blocker</string></property></widget></item>
-         <item><widget class="QCheckBox" name="chk_throttle"><property name="text"><string>Limit Bandwidth</string></property></widget></item>
          <item><widget class="QCheckBox" name="chk_triage"><property name="text"><string>Run Live Triage (Fast Recon)</string></property></widget></item>
+
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_throttle">
+           <item>
+            <widget class="QCheckBox" name="chk_throttle">
+             <property name="text"><string>Limit Bandwidth</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLineEdit" name="txt_throttle">
+             <property name="minimumSize"><size><width>120</width><height>0</height></size></property>
+             <property name="maximumSize"><size><width>150</width><height>16777215</height></size></property>
+             <property name="placeholderText"><string>e.g., 10 (MB/s)</string></property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_throttle">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="sizeHint"><size><width>40</width><height>20</height></size></property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+
         </layout>
        </widget>
       </item>
@@ -109,11 +140,23 @@
       </item>
 
       <item>
-       <widget class="QPushButton" name="btn_start">
-        <property name="text"><string>TAKE IMAGE AND ANALYZE</string></property>
-        <property name="minimumSize"><size><width>0</width><height>50</height></size></property>
-       </widget>
+       <layout class="QHBoxLayout" name="horizontalLayout_actions">
+        <item>
+         <widget class="QPushButton" name="btn_start">
+          <property name="text"><string>TAKE IMAGE AND ANALYZE</string></property>
+          <property name="minimumSize"><size><width>0</width><height>50</height></size></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_stop">
+          <property name="text"><string>STOP / ABORT</string></property>
+          <property name="minimumSize"><size><width>0</width><height>50</height></size></property>
+          <property name="enabled"><bool>false</bool></property>
+         </widget>
+        </item>
+       </layout>
       </item>
+
       <item>
        <widget class="QProgressBar" name="progressBar">
         <property name="value"><number>0</number></property>
