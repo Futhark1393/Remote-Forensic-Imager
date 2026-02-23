@@ -1,4 +1,4 @@
-# 🕵️‍♂️ Remote Forensic Imager v2.0 (Enterprise Edition)
+# 🕵️‍♂️ Remote Forensic Imager v2.0
 
 **Remote Forensic Imager** is a professional Python-based digital forensic tool designed for secure live disk and memory acquisition from remote servers (AWS EC2, VPS, etc.) over encrypted SSH channels.
 
