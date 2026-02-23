@@ -1,6 +1,6 @@
 # Author: Futhark1393
 # Description: Main GUI module for Remote Forensic Imager v2.0.
-# Features Paramiko integration, chunk-based streaming, and on-the-fly hashing.
+# Features Paramiko integration, E01/RAW chunk-based streaming, and on-the-fly hashing.
 
 import sys
 import os
@@ -11,7 +11,6 @@ from PyQt6.uic import loadUi
 from PyQt6.QtGui import QTextCursor
 from fpdf import FPDF
 
-# Import the new v2.0 Paramiko worker thread
 from codes.threads import AcquisitionWorker
 
 class ForensicApp(QMainWindow):
@@ -89,7 +88,7 @@ class ForensicApp(QMainWindow):
         }
 
     def setup_terminal_style(self):
-        # Configure the log console with a hacker/terminal visual style
+        # Configure the log console with a terminal visual style
         self.txt_log.setReadOnly(True)
         self.txt_log.setStyleSheet("""
             QTextEdit {
@@ -185,49 +184,63 @@ class ForensicApp(QMainWindow):
             QMessageBox.warning(self, "Missing Info", "Please fill all required fields, including Target Disk!")
             return
 
-        # Output Directory Selection
         selected_dir = QFileDialog.getExistingDirectory(self, "Select Output Directory for Evidence & Reports")
         if not selected_dir:
             self.log("[!] Operation cancelled: No output directory selected.")
             return
         self.output_dir = selected_dir
 
-        self.btn_start.setEnabled(False)
+        # Format Selection Dialog
+        format_type = "RAW"
+        if not (hasattr(self, 'chk_ram') and self.chk_ram.isChecked()):
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Evidence Format")
+            msg.setText("Select the acquisition format:")
+            btn_e01 = msg.addButton("E01 (EnCase)", QMessageBox.ButtonRole.ActionRole)
+            btn_raw = msg.addButton("RAW (.raw)", QMessageBox.ButtonRole.ActionRole)
+            msg.exec()
 
-        # Set progress bar to indeterminate mode for chunk stream
+            if msg.clickedButton() == btn_e01:
+                format_type = "E01"
+
+        self.btn_start.setEnabled(False)
         self.progressBar.setRange(0, 0)
 
         self.log("\n--- [ STARTING FORENSIC ACQUISITION (v2.0) ] ---")
-        self.log(f"[*] Engine: Paramiko Chunk-Streamer | Case No: {self.case_no}")
+        self.log(f"[*] Engine: Paramiko Chunk-Streamer | Format: {format_type}")
         self.log(f"[*] Target Device: {disk}")
         self.log(f"[*] Output Directory: {self.output_dir}")
 
-        # Note: v2.0 currently defaults to physical RAW stream. E01 integration pending.
-        output_file = os.path.join(self.output_dir, f"evidence_{self.case_no}_{datetime.now().strftime('%Y%m%d%H%M%S')}.raw")
-        self.target_filename = output_file
+        # Fix for double extensions (.E01.E01)
+        base_filename = os.path.join(self.output_dir, f"evidence_{self.case_no}_{datetime.now().strftime('%Y%m%d%H%M%S')}")
 
-        # Initialize the new v2.0 Acquisition Worker
-        self.worker = AcquisitionWorker(ip, user, key, disk, output_file)
+        if format_type == "E01":
+            # pyewf automatically appends .E01 to the base name we provide
+            output_file = base_filename
+            self.target_filename = base_filename + ".E01" # Keep correct name for PDF reports
+        else:
+            output_file = base_filename + ".raw"
+            self.target_filename = output_file
 
-        # Connect real-time signals to GUI slots
+        self.current_format = format_type
+
+        # Initialize the new v2.0 Acquisition Worker with metadata
+        self.worker = AcquisitionWorker(ip, user, key, disk, output_file, format_type, self.case_no, self.examiner)
         self.worker.progress_signal.connect(self.update_progress_ui)
         self.worker.finished_signal.connect(self.on_acquisition_finished)
         self.worker.error_signal.connect(self.on_acquisition_error)
-
         self.worker.start()
 
     def update_progress_ui(self, data):
-        # Real-time UI updates without blocking the main event loop
+        # Real-time UI updates via status bar
         speed = data.get("speed_mb_s", 0)
         md5_cur = data.get("md5_current", "")
         bytes_read = data.get("bytes_read", 0)
-
-        # Update the status bar instead of the log console to prevent UI deadlock/spam
-        status_msg = f"Reading... | Speed: {speed} MB/s | Bytes: {bytes_read} | MD5: {md5_cur}"
+        status_msg = f"Reading... | Format: {self.current_format} | Speed: {speed} MB/s | Bytes: {bytes_read} | MD5: {md5_cur}"
         self.statusBar().showMessage(status_msg)
 
     def on_acquisition_error(self, error_msg):
-        # Handle engine failures gracefully
+        # Handle engine failures
         self.log(f"\n[CRITICAL ERROR] {error_msg}")
         QMessageBox.critical(self, "Process Failed", error_msg)
         self.btn_start.setEnabled(True)
@@ -236,7 +249,7 @@ class ForensicApp(QMainWindow):
         self.statusBar().showMessage("Acquisition Aborted.")
 
     def on_acquisition_finished(self, data):
-        # Post-acquisition processing. Hashes are already calculated.
+        # Post-acquisition processing
         self.progressBar.setRange(0, 100)
         self.progressBar.setValue(100)
         self.btn_start.setEnabled(True)
@@ -245,26 +258,25 @@ class ForensicApp(QMainWindow):
         sha256_hash = data.get("sha256_final", "ERROR")
         md5_hash = data.get("md5_final", "ERROR")
 
-        self.log(f"\n[INFO] Data Acquired: {self.target_filename}")
+        self.log(f"\n[INFO] Data Acquired: {os.path.basename(self.target_filename)}")
         self.log(f"[OK] On-the-fly SHA-256: {sha256_hash}")
         self.log(f"[OK] On-the-fly MD5: {md5_hash}")
 
-        # Mocking last_report_data for legacy PDF generation compatibility
+        # Metadata for reporting
         self.last_report_data = {
             'target_ip': self.txt_ip.text(),
-            'acquisition_type': 'Paramiko Physical Stream (RAW)',
+            'acquisition_type': f"Paramiko Physical Stream ({self.current_format})",
             'start_time': 'Logged in live_forensic.log',
             'end_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'duration': 'Auto-calculated',
             'write_protection': 'Enforced via Engine',
-            'triage_file': 'Not Requested (v2.0 Beta)',
+            'triage_file': 'Not Requested',
             'bad_sectors': []
         }
 
         txt_path = os.path.join(self.output_dir, f"Report_{self.case_no}_{datetime.now().strftime('%Y%m%d')}.txt")
         self.generate_txt_report(sha256_hash, md5_hash, txt_path)
 
-        # Prompt user for PDF report language
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("PDF Report Language")
         msg_box.setText("Select the language for the PDF Executive Summary:")
@@ -285,9 +297,7 @@ class ForensicApp(QMainWindow):
         QMessageBox.information(self, "Success", "Acquisition Complete.\nReports Generated (TXT & PDF).")
 
     def generate_txt_report(self, sha256_hash, md5_hash, filepath):
-        # Generates the plaintext technical forensic report
         bad_sector_text = "\n".join(self.last_report_data.get('bad_sectors', [])) if self.last_report_data.get('bad_sectors') else "No read errors detected."
-
         report_content = f"""
 ================================================================
             DIGITAL FORENSIC ACQUISITION REPORT (v2.0)
@@ -326,14 +336,12 @@ Note: Auto-generated by Remote Forensic Imager (Engine: Paramiko)
             f.write(report_content)
 
     def generate_pdf_report(self, sha256_hash, md5_hash, filepath, lang):
-        # Generates the localized PDF executive summary
         texts = self.lang_dict_tr if lang == "tr" else self.lang_dict_en
         triage_raw = self.last_report_data.get('triage_file', 'Not Requested')
         triage_final = texts['not_requested'] if triage_raw == 'Not Requested' or not triage_raw else triage_raw
 
         pdf = FPDF()
         pdf.add_page()
-
         pdf.set_font("helvetica", 'B', 14)
         pdf.cell(0, 10, texts['report_title'], border=True, ln=1, align='C')
         pdf.ln(5)

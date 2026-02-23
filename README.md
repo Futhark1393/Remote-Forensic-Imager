@@ -6,10 +6,11 @@ Developed by **Futhark1393**, the tool automates the collection of bit-stream im
 
 ![Acquisition Running](screenshots/v2_running.png)
 
-## 🚀 v2.0 Core Engine Devrimleri (The Paramiko Upgrade)
+## 🚀 v2.0 Core Engine Updates (The Paramiko & E01 Upgrade)
 
-The v2.0 release completely overhauls the acquisition engine, transitioning from OS-level `subprocess` pipes to a robust, API-based TCP socket architecture:
+The v2.0 release completely overhauls the acquisition engine, transitioning from OS-level `subprocess` pipes to a robust, API-based TCP socket architecture with native EnCase support:
 
+* **Native E01 (EnCase) Support:** Direct integration with `libewf` allows for acquiring and compressing evidence directly into the industry-standard E01 format, complete with embedded case metadata (Case Number, Examiner).
 * **API-Based SSH Streaming (Paramiko):** Eliminates `shell=True` subprocess dependencies and potential shell injection risks. Direct manipulation of the SSH TCP socket ensures absolute control over the data stream.
 * **Chunk-Based Memory Management:** Data is streamed from the remote block device in 4MB chunks directly into the local RAM, preventing system I/O bottlenecks and GUI deadlocks.
 * **On-The-Fly Hashing:** Dual-Hash (SHA-256 and MD5) signatures are calculated synchronously in-memory as each 4MB chunk arrives. This eliminates the need for post-process disk reading, proving the data's absolute integrity the millisecond the transfer concludes.
@@ -39,8 +40,8 @@ This artifact confirms that the Remote Forensic Imager successfully captures raw
 
 The tool is built with a highly decoupled structure:
 * `main_qt6.py`: Application entry point.
-* `codes/gui.py`: Manages the PyQt6 interface and PDF reporting engine.
-* `codes/engine.py`: The core headless `ForensicAcquisitionEngine` handling Paramiko connections, read-only kernel enforcement (`blockdev`), and generator-based chunk streaming.
+* `codes/gui.py`: Manages the PyQt6 interface, PDF reporting engine, and dynamic extension handling for E01/RAW formats.
+* `codes/engine.py`: The core headless `ForensicAcquisitionEngine` handling Paramiko connections, read-only kernel enforcement (`blockdev`), E01 compression via `pyewf`, and generator-based chunk streaming.
 * `codes/threads.py`: `QThread` workers that bridge the headless engine with the GUI event loop.
 
 ---
@@ -72,7 +73,30 @@ cd Remote-Forensic-Imager
 pip install PyQt6 fpdf2 paramiko
 ```
 
-### 3. Launch the Console
+### 3. Install libewf for E01 Support (Fedora)
+To utilize the E01 format, the `libewf` C library and its Python bindings (`pyewf`) must be compiled from source.
+
+```bash
+# Install build tools and dependencies
+sudo dnf install gcc gcc-c++ make python3-devel zlib-devel openssl-devel
+
+# Download and extract libewf (Experimental 20240506 or later)
+wget [https://github.com/libyal/libewf/releases/download/20240506/libewf-experimental-20240506.tar.gz](https://github.com/libyal/libewf/releases/download/20240506/libewf-experimental-20240506.tar.gz)
+tar -zxvf libewf-experimental-20240506.tar.gz
+cd libewf-20240506/
+
+# Compile with Python support and install to the core system path
+./configure --prefix=/usr --enable-shared --enable-python
+make
+sudo make install
+
+# Ensure shared libraries are correctly placed and update linker cache
+cd libewf/.libs/
+sudo cp -a libewf.so* /usr/lib64/
+sudo ldconfig
+```
+
+### 4. Launch the Console
 ```bash
 python3 main_qt6.py
 ```

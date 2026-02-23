@@ -1,6 +1,5 @@
 # Author: Futhark1393
-# Description: QThread integration for the Paramiko streaming engine.
-# Ensures the PyQt6 GUI remains responsive during heavy network I/O operations.
+# Description: QThread integration for the Paramiko streaming engine with E01.
 
 from PyQt6.QtCore import QThread, pyqtSignal
 from codes.engine import ForensicAcquisitionEngine
@@ -11,10 +10,12 @@ class AcquisitionWorker(QThread):
     finished_signal = pyqtSignal(dict)
     error_signal = pyqtSignal(str)
 
-    def __init__(self, host, username, key_path, target_device, output_file):
+    def __init__(self, host, username, key_path, target_device, output_file, format_type, case_no, examiner):
         super().__init__()
-        # Initialize the core acquisition engine
-        self.engine = ForensicAcquisitionEngine(host, username, key_path, target_device, output_file)
+        # Initialize the core acquisition engine with metadata
+        self.engine = ForensicAcquisitionEngine(
+            host, username, key_path, target_device, output_file, format_type, case_no, examiner
+        )
 
     def run(self):
         try:
@@ -32,14 +33,11 @@ class AcquisitionWorker(QThread):
                     break
 
                 else:
-                    # status == "running"
-                    # Emit current bytes read, speed, and real-time hashes to GUI
+                    # Emit current progress statistics to GUI
                     self.progress_signal.emit(state)
 
         except Exception as e:
-            # Catch any connection or engine exceptions
             self.error_signal.emit(f"Critical Engine Error: {str(e)}")
 
         finally:
-            # Ensure SSH socket is safely closed regardless of success or failure
             self.engine.disconnect()
