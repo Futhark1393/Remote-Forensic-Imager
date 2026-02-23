@@ -6,217 +6,133 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>945</width>
-    <height>635</height>
+    <width>1100</width>
+    <height>750</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Remote Forensic Imager v2.1 (Enterprise Edition)</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout_2">
+   <layout class="QHBoxLayout" name="horizontalLayout">
+
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout">
+     <layout class="QVBoxLayout" name="verticalLayout_left">
+
       <item>
-       <widget class="QLineEdit" name="txt_caseno">
-        <property name="placeholderText">
-         <string>Case Number (e.g., 2026-001)</string>
-        </property>
+       <widget class="QGroupBox" name="groupBox_case">
+        <property name="title"><string>1. Case Identification</string></property>
+        <layout class="QFormLayout" name="formLayout_case">
+         <item row="0" column="0"><widget class="QLabel" name="label"><property name="text"><string>Case No:</string></property></widget></item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="txt_caseno">
+           <property name="placeholderText"><string>e.g., 2026-001</string></property>
+          </widget>
+         </item>
+         <item row="1" column="0"><widget class="QLabel" name="label_2"><property name="text"><string>Examiner:</string></property></widget></item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="txt_examiner">
+           <property name="placeholderText"><string>Lead Investigator Name</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QGroupBox" name="groupBox_server">
+        <property name="title"><string>2. Remote Server (SSH)</string></property>
+        <layout class="QFormLayout" name="formLayout_server">
+         <item row="0" column="0"><widget class="QLabel" name="label_3"><property name="text"><string>Target IP:</string></property></widget></item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="txt_ip">
+           <property name="placeholderText"><string>e.g., 13.51.178.166</string></property>
+          </widget>
+         </item>
+         <item row="1" column="0"><widget class="QLabel" name="label_4"><property name="text"><string>Username:</string></property></widget></item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="txt_user">
+           <property name="placeholderText"><string>e.g., ubuntu / root</string></property>
+          </widget>
+         </item>
+         <item row="2" column="0"><widget class="QLabel" name="label_5"><property name="text"><string>SSH Key:</string></property></widget></item>
+         <item row="2" column="1">
+          <layout class="QHBoxLayout" name="horizontalLayout_key">
+           <item>
+            <widget class="QLineEdit" name="txt_key">
+             <property name="placeholderText"><string>Path to .pem file</string></property>
+            </widget>
+           </item>
+           <item><widget class="QPushButton" name="btn_file"><property name="text"><string>Select</string></property></widget></item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QGroupBox" name="groupBox_disk">
+        <property name="title"><string>3. Evidence Target</string></property>
+        <layout class="QVBoxLayout" name="verticalLayout_disk">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_disk">
+           <item>
+            <widget class="QLineEdit" name="txt_disk">
+             <property name="placeholderText"><string>e.g., /dev/nvme0n1p1</string></property>
+            </widget>
+           </item>
+           <item><widget class="QPushButton" name="btn_discover"><property name="text"><string>Auto-Detect (lsblk)</string></property></widget></item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QGroupBox" name="groupBox_options">
+        <property name="title"><string>4. Acquisition Options</string></property>
+        <layout class="QVBoxLayout" name="verticalLayout_options">
+         <item><widget class="QCheckBox" name="chk_safety"><property name="text"><string>Safe Mode (Ignore Errors)</string></property></widget></item>
+         <item><widget class="QCheckBox" name="chk_ram"><property name="text"><string>Capture Live RAM (Memory)</string></property></widget></item>
+         <item><widget class="QCheckBox" name="chk_writeblock"><property name="text"><string>Enable Kernel Write-Blocker</string></property></widget></item>
+         <item><widget class="QCheckBox" name="chk_throttle"><property name="text"><string>Limit Bandwidth</string></property></widget></item>
+         <item><widget class="QCheckBox" name="chk_triage"><property name="text"><string>Run Live Triage (Fast Recon)</string></property></widget></item>
+        </layout>
+       </widget>
+      </item>
+
+      <item>
+       <spacer name="verticalSpacer">
+        <property name="orientation"><enum>Qt::Vertical</enum></property>
+        <property name="sizeHint"><size><width>20</width><height>40</height></size></property>
+       </spacer>
+      </item>
+
+      <item>
+       <widget class="QPushButton" name="btn_start">
+        <property name="text"><string>TAKE IMAGE AND ANALYZE</string></property>
+        <property name="minimumSize"><size><width>0</width><height>50</height></size></property>
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="txt_examiner">
-        <property name="placeholderText">
-         <string>Examiner Name</string>
-        </property>
+       <widget class="QProgressBar" name="progressBar">
+        <property name="value"><number>0</number></property>
        </widget>
       </item>
+
      </layout>
     </item>
+
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="1,3">
-      <item>
-       <layout class="QVBoxLayout" name="verticalLayout">
-        <item>
-         <widget class="QLineEdit" name="txt_ip">
-          <property name="maximumSize">
-           <size>
-            <width>250</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="placeholderText">
-           <string>Server IP</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLineEdit" name="txt_user">
-          <property name="maximumSize">
-           <size>
-            <width>250</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="placeholderText">
-           <string>Username</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLineEdit" name="txt_key">
-          <property name="maximumSize">
-           <size>
-            <width>250</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="placeholderText">
-           <string>SSH Key</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QToolButton" name="btn_file">
-          <property name="maximumSize">
-           <size>
-            <width>29</width>
-            <height>26</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>...</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLineEdit" name="txt_disk">
-          <property name="maximumSize">
-           <size>
-            <width>250</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
-          <property name="placeholderText">
-           <string>Disk Name: e.g., /dev/nvme0n1</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="btn_discover">
-          <property name="text">
-           <string>Auto-Detect</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QCheckBox" name="chk_safety">
-          <property name="maximumSize">
-           <size>
-            <width>250</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Safe Mode</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QCheckBox" name="chk_ram">
-          <property name="text">
-           <string>Capture Live RAM (Memory)</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QCheckBox" name="chk_writeblock">
-          <property name="maximumSize">
-           <size>
-            <width>250</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Enable Write Blocker</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QCheckBox" name="chk_triage">
-          <property name="text">
-           <string>Run Live Triage (Fast Recon)</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QCheckBox" name="chk_throttle">
-          <property name="text">
-           <string>Limit Bandwidth</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLineEdit" name="txt_throttle">
-          <property name="text">
-           <string/>
-          </property>
-          <property name="placeholderText">
-           <string>e.g., MB/s: 10</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="btn_start">
-          <property name="maximumSize">
-           <size>
-            <width>250</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Take Image and Analyze</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QProgressBar" name="progressBar">
-          <property name="maximumSize">
-           <size>
-            <width>250</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="value">
-           <number>24</number>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <widget class="QTextEdit" name="txt_log">
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-     </layout>
+     <widget class="QGroupBox" name="groupBox_log">
+      <property name="title"><string>Live Acquisition Console</string></property>
+      <layout class="QVBoxLayout" name="verticalLayout_log">
+       <item><widget class="QTextEdit" name="txt_log"/></item>
+      </layout>
+     </widget>
     </item>
+
    </layout>
-  </widget>
-  <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>945</width>
-     <height>30</height>
-    </rect>
-   </property>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
