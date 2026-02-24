@@ -6,7 +6,11 @@ import paramiko
 import hashlib
 import time
 import os
-import pyewf
+
+try:
+    import pyewf  # Optional (E01 support)
+except ImportError:
+    pyewf = None
 
 class ForensicAcquisitionEngine:
     def __init__(self, host, username, key_path, target_device, output_file, format_type="RAW", case_no="UNKNOWN", examiner="UNKNOWN"):
@@ -49,6 +53,9 @@ class ForensicAcquisitionEngine:
 
     def acquire_and_hash(self):
         # Main generator function for chunk-based streaming and on-the-fly hashing
+        if self.format_type == "E01" and pyewf is None:
+            raise RuntimeError("E01 support requires pyewf/libewf. Install system libewf + pyewf to enable E01.")
+        
         self.enforce_write_blocker()
 
         md5_hash = hashlib.md5()
