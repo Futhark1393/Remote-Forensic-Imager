@@ -9,6 +9,14 @@ It enforces a structured forensic workflow, generates a **cryptographically hash
 
 ---
 
+## Project Page
+
+A detailed engineering write-up (architecture decisions, audit trail model, integrity verification) is available here:
+
+👉 https://kemalsebzeci-site.vercel.app/blog/rfi-architecture
+
+---
+
 ## Interface Preview
 
 Screenshots included in `./screenshots/`
@@ -142,7 +150,7 @@ sudo apt install -y libewf2 python3-libewf
 pip install libewf-python
 ~~~
 
-> Note: the import name in Python is often `pyewf` even when the package name is `python3-libewf` or `libewf-python`.
+Note: the import name in Python is often `pyewf` even when the package name is `python3-libewf` or `libewf-python`.
 
 If E01 bindings are not installed:
 - RAW acquisition works normally
@@ -165,14 +173,14 @@ rfi
 
 # Workflow
 
-1. Start RFI → Case Wizard appears
-2. Define Case Number + Examiner
-3. Bind Evidence Directory
-4. Enter SSH details
-5. Discover disks (optional)
-6. Select acquisition target
-7. Choose format (RAW / E01)
-8. Acquire → Report generated → Audit trail sealed (best-effort)
+1. Start RFI → Case Wizard appears  
+2. Define Case Number + Examiner  
+3. Bind Evidence Directory  
+4. Enter SSH details  
+5. Discover disks (optional)  
+6. Select acquisition target  
+7. Choose format (RAW / E01)  
+8. Acquire → Report generated → Audit trail sealed (best-effort)  
 
 ---
 
@@ -190,7 +198,7 @@ Inside the selected Evidence Directory, RFI generates:
 ## Notes on Verification
 
 - E01 is a container format. Verification is based on stream hashing + optional source hashing.
-- If the target device is a **live system disk**, post-acquisition `/dev/...` hashing may differ due to ongoing writes.
+- If the target device is a live system disk, post-acquisition `/dev/...` hashing may differ due to ongoing writes.
 - For strict source-to-image equivalence, acquire from a stable target (unmounted disk, snapshot, or write-blocked device).
 
 ---
@@ -199,5 +207,8 @@ Inside the selected Evidence Directory, RFI generates:
 
 MIT License — see [LICENSE](LICENSE)
 
+---
+
 ## Author
+
 Futhark1393
