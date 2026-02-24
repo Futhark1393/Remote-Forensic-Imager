@@ -196,7 +196,8 @@ Inside the selected Evidence Directory, RFI generates:
 ---
 
 ## License
-MIT License (see `LICENSE`).
+
+MIT License — see [LICENSE](LICENSE)
 
 ## Author
 Futhark1393
