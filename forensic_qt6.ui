@@ -101,7 +101,7 @@
         <property name="title"><string>4. Acquisition Options</string></property>
         <layout class="QVBoxLayout" name="verticalLayout_options">
          <item><widget class="QCheckBox" name="chk_safety"><property name="text"><string>Safe Mode (Ignore Errors)</string></property></widget></item>
-         <item><widget class="QCheckBox" name="chk_verify"><property name="text"><string>Verify Integrity (Remote Hash Match)</string></property></widget></item>
+         <item><widget class="QCheckBox" name="chk_verify"><property name="text"><string>Verify Integrity (Remote Hash Match)</string></property><property name="toolTip"><string>Post-acquisition source hashing may mismatch on live disks; use snapshots/unmounted targets.</string></property></widget></item>
          <item><widget class="QCheckBox" name="chk_ram"><property name="text"><string>Capture Live RAM (Memory)</string></property></widget></item>
          <item><widget class="QCheckBox" name="chk_writeblock"><property name="text"><string>Enable Kernel Write-Blocker</string></property></widget></item>
          <item><widget class="QCheckBox" name="chk_triage"><property name="text"><string>Run Live Triage (Fast Recon)</string></property></widget></item>

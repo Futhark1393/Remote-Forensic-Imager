@@ -171,8 +171,8 @@ Any modification, removal, or reordering of records should fail verification.
 ## Notes on Verification
 
 - E01 is a container format. Integrity verification is performed against the acquisition stream hash and optional source hash collection.
-- If the target device is a live system disk, post-acquisition `/dev/...` hashing may differ due to ongoing writes.
-- For strict source-to-image equivalence, acquire from a stable target (unmounted disk, snapshot, or write-blocked device).
+- **If the target is a live system disk, source SHA-256 collected after acquisition may differ due to ongoing writes. Prefer snapshots or unmounted devices for strict equivalence.**
+- This is expected behavior on live disks and should not be reported as a bug.
 
 ---
 
