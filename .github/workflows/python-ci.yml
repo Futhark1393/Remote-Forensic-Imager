@@ -52,9 +52,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install test dependencies
+        run: pip install pytest
+
       - name: Import test
         run: |
-          python -c "import codes.logger"
-          python -c "import codes.threads"
-          python -c "import codes.dependency_checker"
-          python -c "import codes.gui"
+          python -c "from rfi.core.session import Session"
+          python -c "from rfi.core.hashing import StreamHasher"
+          python -c "from rfi.audit.logger import ForensicLogger"
+          python -c "from rfi.audit.verify import AuditChainVerifier"
+          python -c "from rfi.report.report_engine import ReportEngine"
+          python -c "from rfi.deps.dependency_checker import run_dependency_check"
+          python -c "from rfi.ui.gui import ForensicApp, CaseWizard"
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
