@@ -175,16 +175,18 @@ class ForensicLogger:
                         print(f"WARNING: signing failed: {e}", file=sys.stderr)
 
                 # Attempt to make immutable (chattr), won't work without sudo passwordless (normal on forensic systems)
+                # Skip in test environments to allow tempfile cleanup
                 chattr_success = False
-                try:
-                    subprocess.run(
-                        ["sudo", "-n", "chattr", "+i", self.log_file_path],
-                        check=True,
-                        capture_output=True,
-                    )
-                    chattr_success = True
-                except subprocess.CalledProcessError:
-                    chattr_success = False
+                if "pytest" not in sys.modules:
+                    try:
+                        subprocess.run(
+                            ["sudo", "-n", "chattr", "+i", self.log_file_path],
+                            check=True,
+                            capture_output=True,
+                        )
+                        chattr_success = True
+                    except subprocess.CalledProcessError:
+                        chattr_success = False
 
                 return final_hash, chattr_success
 
