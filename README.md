@@ -46,6 +46,9 @@ Screenshots included in `./screenshots/`
 - Report Preview  
   ![Report Preview](screenshots/report_preview.png)
 
+- CLI Mode  
+  ![CLI Banner](screenshots/cli_banner.png)
+
 ---
 
 # Core Capabilities
@@ -112,6 +115,8 @@ Illegal transitions (e.g., acquiring before context binding, logging after seali
 # CLI Tooling
 
 ## Headless Acquisition (No GUI)
+
+![CLI Banner](screenshots/cli_banner.png)
 
 Run forensic acquisition from any terminal — no X11 or Qt required:
 

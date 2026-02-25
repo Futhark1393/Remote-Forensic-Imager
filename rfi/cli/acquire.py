@@ -96,19 +96,38 @@ def main() -> int:
         return 1
 
     # ── Banner ───────────────────────────────────────────────────────
-    print("=" * 60)
-    print("  REMOTE FORENSIC IMAGER — CLI MODE")
-    print("=" * 60)
-    print(f"  Session : {logger.session_id}")
-    print(f"  Case    : {case_no}")
-    print(f"  Examiner: {examiner}")
-    print(f"  Target  : {args.user}@{args.ip}:{args.disk}")
-    print(f"  Format  : {args.format}")
-    print(f"  Output  : {output_dir}")
-    print(f"  Verify  : {'YES' if args.verify else 'NO'}")
-    print(f"  Safe    : {'YES' if safe_mode else 'NO'}")
-    print(f"  WBlock  : {'YES' if args.write_blocker else 'NO'}")
-    print("=" * 60)
+    C0 = "\033[0m"       # reset
+    C1 = "\033[1;36m"    # bold cyan
+    C2 = "\033[0;36m"    # cyan
+    C3 = "\033[1;37m"    # bold white
+    DIM = "\033[2m"      # dim
+
+    logo = [
+        f"{C1} ██████╗  ███████╗ ██╗",
+        f"{C1} ██╔══██╗ ██╔════╝ ██║",
+        f"{C1} ██████╔╝ █████╗   ██║",
+        f"{C2} ██╔══██╗ ██╔══╝   ██║",
+        f"{C2} ██║  ██║ ██║      ██║",
+        f"{C2} ╚═╝  ╚═╝ ╚═╝      ╚═╝",
+        f"{DIM} Remote Forensic Imager{C0}",
+    ]
+
+    info = [
+        f"{C3}Session{C0}   {DIM}{logger.session_id}{C0}",
+        f"{C3}Case{C0}      {case_no}",
+        f"{C3}Examiner{C0}  {examiner}",
+        f"{C3}Target{C0}    {args.user}@{args.ip}:{args.disk}",
+        f"{C3}Format{C0}    {args.format}",
+        f"{C3}Output{C0}    {output_dir}",
+        f"{C3}Verify{C0}    {'✓' if args.verify else '✗'}  {C3}Safe{C0} {'✓' if safe_mode else '✗'}  {C3}WBlock{C0} {'✓' if args.write_blocker else '✗'}",
+    ]
+
+    print()
+    for i in range(max(len(logo), len(info))):
+        left = logo[i] if i < len(logo) else " " * 24
+        right = f"   {info[i]}" if i < len(info) else ""
+        print(f"  {left}{C0}{right}")
+    print()
 
     logger.log("CLI acquisition initiated.", "INFO", "ACQUISITION_START", source_module="cli")
     logger.log(
