@@ -82,7 +82,8 @@ Illegal transitions (e.g., acquiring before context binding, logging after seali
 - Optional sealing (best-effort):
   - `chmod 444`
   - `chattr +i` (if available)
-- Offline chain verification support
+- **Optional Ed25519 digital signature** (detached `.sig` file)
+- Offline chain verification + signature verification support
 
 ## Acquisition & Integrity
 
@@ -110,7 +111,34 @@ Illegal transitions (e.g., acquiring before context binding, logging after seali
 
 # CLI Tooling
 
-RFI includes a command-line verifier for audit trails.
+## Headless Acquisition (No GUI)
+
+Run forensic acquisition from any terminal — no X11 or Qt required:
+
+~~~bash
+rfi-acquire \
+  --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
+  --disk /dev/sda --output-dir ./evidence \
+  --case 2026-001 --examiner "Investigator" \
+  --format RAW --verify --safe-mode --write-blocker \
+  --signing-key ./rfi_signing.key
+~~~
+
+All parameters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `--ip`, `--user`, `--key` | SSH connection details (required) |
+| `--disk` | Target block device (required) |
+| `--output-dir` | Evidence output directory (required) |
+| `--case`, `--examiner` | Case metadata (required) |
+| `--format RAW\|E01` | Evidence format (default: RAW) |
+| `--verify` | Post-acquisition remote SHA-256 check |
+| `--safe-mode` | `conv=noerror,sync` (default: on) |
+| `--write-blocker` | Software write-blocker |
+| `--triage` | Pre-acquisition live triage |
+| `--throttle N` | Bandwidth limit in MB/s |
+| `--signing-key PATH` | Ed25519 key for audit trail signing |
 
 ## Verify Audit Chain
 
@@ -118,17 +146,25 @@ RFI includes a command-line verifier for audit trails.
 python rfi_verify.py AuditTrail_CASE_SESSION.jsonl
 ~~~
 
-Or if installed as alias:
+With digital signature verification:
 
 ~~~bash
-rfi-verify AuditTrail_CASE_SESSION.jsonl
+python rfi_verify.py AuditTrail_CASE_SESSION.jsonl --pubkey rfi_signing.pub
 ~~~
 
 Exit codes:
 
-- `0` → PASS  
+- `0` → PASS (chain + optional signature valid)
 - `2` → FAIL (tampering detected)  
 - `1` → Error  
+
+## Generate Signing Keypair
+
+~~~bash
+python -c "from rfi.audit.signing import generate_signing_keypair; generate_signing_keypair('.')"
+~~~
+
+Creates `rfi_signing.key` (private, keep secure) and `rfi_signing.pub` (public, distribute for verification).
 
 ---
 
@@ -136,6 +172,8 @@ Exit codes:
 
 ~~~text
 rfi/
+├── cli/                             # Headless CLI tools
+│   └── acquire.py                   # CLI acquisition (no Qt dependency)
 ├── ui/                              # Qt / GUI layer
 │   ├── gui.py                       # CaseWizard + ForensicApp (Session-driven)
 │   ├── workers.py                   # Thin QThread wrapper (~70 lines, no business logic)
@@ -150,9 +188,10 @@ rfi/
 │       ├── raw.py                   # RawWriter
 │       ├── ewf.py                   # EwfWriter
 │       └── verify.py                # Post-acquisition remote hash verification
-├── audit/                           # Tamper-evident logging
+├── audit/                           # Tamper-evident logging + signing
 │   ├── logger.py                    # ForensicLogger (hash-chained JSONL)
-│   └── verify.py                    # AuditChainVerifier
+│   ├── verify.py                    # AuditChainVerifier
+│   └── signing.py                   # Ed25519 key generation, signing, verification
 ├── report/
 │   └── report_engine.py             # TXT + PDF forensic reporting
 └── deps/
@@ -179,7 +218,9 @@ Unit tests cover:
 - StreamHasher (incremental hashing correctness)
 - RawWriter (write/close behavior)
 - Policy helpers (dd command construction)
-- AuditChainVerifier (chain integrity validation)
+- ForensicLogger (chain integrity, seal enforcement, tamper detection)
+- Ed25519 signing (keygen → sign → verify round-trip, tamper detection)
+- ReportEngine (TXT + PDF generation)
 
 ---
 

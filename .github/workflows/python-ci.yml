@@ -61,8 +61,10 @@ jobs:
           python -c "from rfi.core.hashing import StreamHasher"
           python -c "from rfi.audit.logger import ForensicLogger"
           python -c "from rfi.audit.verify import AuditChainVerifier"
+          python -c "from rfi.audit.signing import generate_signing_keypair, sign_audit_trail, verify_audit_signature"
           python -c "from rfi.report.report_engine import ReportEngine"
           python -c "from rfi.deps.dependency_checker import run_dependency_check"
+          python -c "from rfi.cli.acquire import main"
           python -c "from rfi.ui.gui import ForensicApp, CaseWizard"
 
       - name: Run tests

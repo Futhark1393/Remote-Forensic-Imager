@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+# Author: Futhark1393
+# Description: CLI-only forensic acquisition — no GUI, no Qt dependency.
+# Usage: rfi-acquire --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
+#                    --disk /dev/sda --output-dir ./evidence \
+#                    --case 2026-001 --examiner "Investigator"
+
+import argparse
+import os
+import sys
+import time
+from datetime import datetime, timezone
+
+from rfi.core.session import Session, SessionStateError
+from rfi.core.acquisition.base import AcquisitionEngine, AcquisitionError
+from rfi.audit.logger import ForensicLogger, ForensicLoggerError
+from rfi.report.report_engine import ReportEngine
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        prog="rfi-acquire",
+        description="Remote Forensic Imager — headless CLI acquisition.",
+    )
+
+    # Required
+    p.add_argument("--ip", required=True, help="Target IP address")
+    p.add_argument("--user", required=True, help="SSH username")
+    p.add_argument("--key", required=True, help="Path to SSH private key (.pem)")
+    p.add_argument("--disk", required=True, help="Target block device (e.g., /dev/sda)")
+    p.add_argument("--output-dir", required=True, help="Evidence output directory")
+    p.add_argument("--case", required=True, help="Case number")
+    p.add_argument("--examiner", required=True, help="Examiner name")
+
+    # Optional
+    p.add_argument("--format", choices=["RAW", "E01"], default="RAW", help="Evidence format (default: RAW)")
+    p.add_argument("--verify", action="store_true", help="Post-acquisition remote SHA-256 verification")
+    p.add_argument("--safe-mode", action="store_true", default=True, help="Safe mode: conv=noerror,sync (default: on)")
+    p.add_argument("--no-safe-mode", action="store_true", help="Disable safe mode")
+    p.add_argument("--write-blocker", action="store_true", help="Apply software write-blocker")
+    p.add_argument("--triage", action="store_true", help="Run live triage before acquisition")
+    p.add_argument("--throttle", type=float, default=0.0, help="Bandwidth limit in MB/s (0 = unlimited)")
+    p.add_argument("--signing-key", help="Path to Ed25519 private key for audit trail signing")
+
+    return p.parse_args()
+
+
+def cli_progress(data: dict) -> None:
+    """Print acquisition progress to terminal."""
+    pct = data.get("percentage", 0)
+    speed = data.get("speed_mb_s", 0)
+    eta = data.get("eta", "")
+    md5 = data.get("md5_current", "")
+    bytes_read = data.get("bytes_read", 0)
+
+    mb_read = bytes_read / (1024 * 1024)
+    bar_len = 30
+    filled = int(bar_len * pct / 100)
+    bar = "█" * filled + "░" * (bar_len - filled)
+
+    line = f"\r  [{bar}] {pct:3d}% | {mb_read:,.0f} MB | {speed:.1f} MB/s | ETA: {eta}"
+    sys.stdout.write(line)
+    sys.stdout.flush()
+
+
+def main() -> int:
+    args = parse_args()
+
+    safe_mode = True
+    if args.no_safe_mode:
+        safe_mode = False
+
+    output_dir = os.path.abspath(args.output_dir)
+    if not os.path.isdir(output_dir):
+        print(f"ERROR: Output directory does not exist: {output_dir}", file=sys.stderr)
+        return 1
+
+    # ── Session ──────────────────────────────────────────────────────
+    session = Session()
+
+    # ── Logger ───────────────────────────────────────────────────────
+    logger = ForensicLogger()
+    try:
+        logger.set_context(args.case, args.examiner, output_dir)
+    except ForensicLoggerError as e:
+        print(f"ERROR: Audit trail initialization failed: {e}", file=sys.stderr)
+        return 1
+
+    case_no = logger.case_no
+    examiner = logger.examiner
+
+    try:
+        session.bind_context(case_no, examiner, output_dir)
+    except SessionStateError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    # ── Banner ───────────────────────────────────────────────────────
+    print("=" * 60)
+    print("  REMOTE FORENSIC IMAGER — CLI MODE")
+    print("=" * 60)
+    print(f"  Session : {logger.session_id}")
+    print(f"  Case    : {case_no}")
+    print(f"  Examiner: {examiner}")
+    print(f"  Target  : {args.user}@{args.ip}:{args.disk}")
+    print(f"  Format  : {args.format}")
+    print(f"  Output  : {output_dir}")
+    print(f"  Verify  : {'YES' if args.verify else 'NO'}")
+    print(f"  Safe    : {'YES' if safe_mode else 'NO'}")
+    print(f"  WBlock  : {'YES' if args.write_blocker else 'NO'}")
+    print("=" * 60)
+
+    logger.log("CLI acquisition initiated.", "INFO", "ACQUISITION_START", source_module="cli")
+    logger.log(
+        f"Target: {args.user}@{args.ip}:{args.disk} | Format: {args.format} | "
+        f"Verify: {args.verify} | Safe: {safe_mode} | WriteBlock: {args.write_blocker}",
+        "INFO", "ACQUISITION_PARAMS", source_module="cli",
+    )
+
+    # ── Build output filename ────────────────────────────────────────
+    timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    base_filename = os.path.join(output_dir, f"evidence_{case_no}_{timestamp_str}")
+    ext = ".E01" if args.format == "E01" else ".raw"
+    target_filename = base_filename + ext
+    output_file = base_filename if args.format == "E01" else target_filename
+
+    # ── Acquire ──────────────────────────────────────────────────────
+    try:
+        session.begin_acquisition()
+    except SessionStateError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    start_time = datetime.now(timezone.utc)
+    print(f"\n  Starting acquisition at {start_time.strftime('%H:%M:%S UTC')}...\n")
+
+    engine = AcquisitionEngine(
+        ip=args.ip,
+        user=args.user,
+        key_path=args.key,
+        disk=args.disk,
+        output_file=output_file,
+        format_type=args.format,
+        case_no=case_no,
+        examiner=examiner,
+        throttle_limit=args.throttle,
+        safe_mode=safe_mode,
+        run_triage=args.triage,
+        output_dir=output_dir,
+        verify_hash=args.verify,
+        write_blocker=args.write_blocker,
+        on_progress=cli_progress,
+    )
+
+    try:
+        result = engine.run()
+    except AcquisitionError as e:
+        print(f"\n\n  ACQUISITION FAILED: {e}\n", file=sys.stderr)
+        logger.log(f"Acquisition failed: {e}", "ERROR", "ACQUISITION_FAILED", source_module="cli")
+        return 1
+
+    # ── Results ──────────────────────────────────────────────────────
+    print("\n\n" + "=" * 60)
+    print("  ACQUISITION COMPLETE")
+    print("=" * 60)
+
+    sha256 = result["sha256_final"]
+    md5 = result["md5_final"]
+    total_bytes = result["total_bytes"]
+    remote_sha256 = result.get("remote_sha256", "SKIPPED")
+    hash_match = result.get("hash_match")
+
+    duration = str(datetime.now(timezone.utc) - start_time).split(".")[0]
+
+    print(f"  Duration     : {duration}")
+    print(f"  Total Bytes  : {total_bytes:,}")
+    print(f"  Local SHA-256: {sha256}")
+    print(f"  Local MD5    : {md5}")
+
+    logger.log("Acquisition completed.", "INFO", "INTEGRITY_LOCAL", source_module="cli", hash_context={
+        "local_sha256": sha256,
+        "local_md5": md5,
+        "remote_sha256": None if remote_sha256 == "SKIPPED" else remote_sha256,
+        "verified": hash_match,
+    })
+
+    # Verification
+    if args.verify:
+        try:
+            session.begin_verification()
+        except SessionStateError:
+            pass
+        print(f"  Remote SHA256: {remote_sha256}")
+        if hash_match is True:
+            print("  Verification : ✅ MATCH")
+            logger.log("Source and local hashes MATCH.", "INFO", "INTEGRITY_VERIFIED", source_module="cli")
+        elif hash_match is False:
+            print("  Verification : ❌ MISMATCH")
+            logger.log("Source and local hashes MISMATCH.", "ERROR", "INTEGRITY_MISMATCH", source_module="cli")
+        else:
+            print("  Verification : ⚠️  UNKNOWN")
+
+    # ── Seal ─────────────────────────────────────────────────────────
+    try:
+        session.seal()
+    except SessionStateError:
+        pass
+
+    signing_key = getattr(args, "signing_key", None)
+    audit_hash, chattr_success = logger.seal_audit_trail(signing_key_path=signing_key)
+
+    print(f"\n  Audit Hash   : {audit_hash}")
+    print(f"  Kernel Seal  : {'SUCCESS' if chattr_success else 'FAILED (no sudo)'}")
+
+    # ── Reports ──────────────────────────────────────────────────────
+    txt_path = os.path.join(output_dir, f"Report_{case_no}_{timestamp_str}.txt")
+    pdf_path = os.path.join(output_dir, f"Report_{case_no}_{timestamp_str}.pdf")
+
+    report_data = {
+        "case_no": case_no,
+        "examiner": examiner,
+        "ip": args.ip,
+        "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "duration": duration,
+        "format_type": args.format,
+        "target_filename": target_filename,
+        "triage_requested": args.triage,
+        "writeblock_requested": args.write_blocker,
+        "throttle_enabled": args.throttle > 0,
+        "throttle_val": str(args.throttle),
+        "safe_mode": safe_mode,
+        "remote_sha256": remote_sha256,
+        "local_sha256": sha256,
+        "local_md5": md5,
+        "hash_match": hash_match,
+        "audit_hash": audit_hash,
+        "kernel_seal_success": chattr_success,
+        "txt_path": txt_path,
+        "pdf_path": pdf_path,
+    }
+
+    ReportEngine.generate_reports(report_data)
+    print(f"\n  Reports saved to: {output_dir}")
+
+    try:
+        session.finalize()
+    except SessionStateError:
+        pass
+
+    print("=" * 60)
+    print("  DONE — Audit trail sealed.")
+    print("=" * 60)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

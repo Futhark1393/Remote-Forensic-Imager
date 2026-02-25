@@ -135,7 +135,16 @@ class ForensicLogger:
         except OSError as e:
             raise ForensicLoggerError(f"File System Write Error: {str(e)}")
 
-    def seal_audit_trail(self) -> tuple[str, bool]:
+    def seal_audit_trail(self, signing_key_path: str | None = None) -> tuple[str, bool]:
+        """
+        Seal the audit trail: compute final hash, chmod 444, optional chattr +i,
+        and optional Ed25519 digital signature.
+
+        If *signing_key_path* is provided, a detached ``.sig`` file is written
+        alongside the JSONL file.
+
+        Returns (final_hash, chattr_success).
+        """
         with self._lock:
             if not self.log_file_path or not os.path.exists(self.log_file_path):
                 return "UNAVAILABLE", False
@@ -155,6 +164,15 @@ class ForensicLogger:
                     for chunk in iter(lambda: f.read(4096), b""):
                         hasher.update(chunk)
                 final_hash = hasher.hexdigest()
+
+                # Digital signature (optional)
+                sig_path = None
+                if signing_key_path:
+                    try:
+                        from rfi.audit.signing import sign_audit_trail
+                        sig_path = sign_audit_trail(self.log_file_path, signing_key_path)
+                    except Exception as e:
+                        print(f"WARNING: signing failed: {e}", file=sys.stderr)
 
                 os.chmod(self.log_file_path, 0o444)
 
