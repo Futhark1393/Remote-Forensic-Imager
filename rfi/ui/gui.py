@@ -1,8 +1,7 @@
 # Author: Futhark1393
 # Description: Main GUI module for Remote Forensic Imager.
 # Features: Case Wizard workflow, structured forensic logging, secure acquisition orchestration,
-#          optional write-blocker, post-acq verification, and report generation.
-# Now integrates the Session state machine for forensic workflow enforcement.
+#          optional write-blocker, post-acq verification, report generation, triage, SIEM, signing.
 
 import sys
 import os
@@ -32,6 +31,18 @@ from rfi.audit.logger import ForensicLogger, ForensicLoggerError
 from rfi.report.report_engine import ReportEngine
 from rfi.ui.workers import AcquisitionWorker
 from rfi.core.session import Session, SessionState, SessionStateError
+
+
+_FORMAT_MAP = {
+    "RAW (.raw)": "RAW",
+    "E01 (EnCase)": "E01",
+    "AFF4": "AFF4",
+}
+_FORMAT_EXT = {
+    "RAW": ".raw",
+    "E01": ".E01",
+    "AFF4": ".aff4",
+}
 
 
 class CaseWizard(QDialog):
@@ -128,7 +139,6 @@ class ForensicApp(QMainWindow):
     def __init__(self, case_no: str, examiner: str, evidence_dir: str):
         super().__init__()
 
-        # Locate UI file relative to this module
         ui_path = os.path.join(os.path.dirname(__file__), "resources", "forensic_qt6.ui")
         try:
             loadUi(ui_path, self)
@@ -148,7 +158,6 @@ class ForensicApp(QMainWindow):
             self.logger.set_context(case_no, examiner, self.output_dir)
             self.case_no = self.logger.case_no
             self.examiner = self.logger.examiner
-            # Bind session context
             self.session.bind_context(self.case_no, self.examiner, self.output_dir)
         except ForensicLoggerError as e:
             QMessageBox.critical(self, "Critical Audit Failure", f"Could not initialize Audit Trail.\n\nError: {e}")
@@ -156,7 +165,18 @@ class ForensicApp(QMainWindow):
 
         self.setup_terminal_style()
         self.setup_tooltips()
+        self.setup_connections()
+        self.setup_defaults()
 
+        self.progressBar.setValue(0)
+        self.worker = None
+        self.start_time = None
+        self.format_type = "RAW"
+        self.target_filename = ""
+
+    # ── Setup ────────────────────────────────────────────────────────
+
+    def setup_connections(self):
         self.btn_file.clicked.connect(self.select_key)
         self.btn_start.clicked.connect(self.start_process)
         self.btn_stop.clicked.connect(self.stop_process)
@@ -164,26 +184,43 @@ class ForensicApp(QMainWindow):
         if hasattr(self, "btn_discover"):
             self.btn_discover.clicked.connect(self.discover_disks)
 
+        if hasattr(self, "btn_signing_key"):
+            self.btn_signing_key.clicked.connect(self.select_signing_key)
+
+        # Triage sub-options: enable/disable when chk_triage toggled
+        if hasattr(self, "chk_triage"):
+            self.chk_triage.toggled.connect(self._on_triage_toggled)
+
+        # SIEM fields: enable/disable when chk_siem toggled
+        if hasattr(self, "chk_siem"):
+            self.chk_siem.toggled.connect(self._on_siem_toggled)
+
+    def setup_defaults(self):
         if hasattr(self, "txt_caseno"):
             self.txt_caseno.setText(self.case_no)
             self.txt_caseno.setReadOnly(True)
         if hasattr(self, "txt_examiner"):
             self.txt_examiner.setText(self.examiner)
             self.txt_examiner.setReadOnly(True)
-
         if hasattr(self, "txt_user"):
             self.txt_user.setText("ubuntu")
-
         if hasattr(self, "chk_safety"):
             self.chk_safety.setChecked(True)
         if hasattr(self, "chk_verify"):
             self.chk_verify.setChecked(True)
 
-        self.progressBar.setValue(0)
-        self.worker = None
-        self.start_time = None
-        self.format_type = "RAW"
-        self.target_filename = ""
+        # Triage sub defaults (on, checked)
+        for name in ("chk_triage_network", "chk_triage_processes", "chk_triage_hash_exes"):
+            if hasattr(self, name):
+                getattr(self, name).setChecked(True)
+                getattr(self, name).setEnabled(False)  # disabled until triage enabled
+
+        if hasattr(self, "chk_triage_memory"):
+            self.chk_triage_memory.setChecked(False)
+            self.chk_triage_memory.setEnabled(False)
+
+        if hasattr(self, "txt_siem_port"):
+            self.txt_siem_port.setText("514")
 
     def setup_terminal_style(self):
         self.txt_log.setReadOnly(True)
@@ -210,11 +247,47 @@ class ForensicApp(QMainWindow):
             self.chk_verify.setToolTip("Compute source SHA-256 after acquisition and compare to stream hash.")
         if hasattr(self, "chk_safety"):
             self.chk_safety.setToolTip("Safe mode: conv=noerror,sync (pads unreadable blocks with zeros).")
+        if hasattr(self, "chk_triage"):
+            self.chk_triage.setToolTip("Collect volatile evidence before acquisition (read-only, no modifications to target).")
+        if hasattr(self, "chk_triage_memory"):
+            self.chk_triage_memory.setToolTip("Stream /proc/kcore or /proc/meminfo (requires root on target).")
+        if hasattr(self, "chk_triage_hash_exes"):
+            self.chk_triage_hash_exes.setToolTip("SHA-256 hash each process executable via /proc/<pid>/exe.")
+        if hasattr(self, "txt_signing_key"):
+            self.txt_signing_key.setToolTip("Ed25519 private key for signing the audit trail. Leave empty to skip signing.")
+        if hasattr(self, "chk_siem"):
+            self.chk_siem.setToolTip("Forward audit log entries to a remote syslog/SIEM server in real-time.")
+        if hasattr(self, "chk_siem_cef"):
+            self.chk_siem_cef.setToolTip("Use CEF (Common Event Format) instead of RFC 5424 syslog format.")
+        if hasattr(self, "cmb_format"):
+            self.cmb_format.setToolTip("RAW: raw disk image. E01: EnCase format (needs libewf). AFF4: requires pyaff4.")
+
+    # ── Slot helpers ─────────────────────────────────────────────────
+
+    def _on_triage_toggled(self, checked: bool) -> None:
+        for name in ("chk_triage_network", "chk_triage_processes",
+                     "chk_triage_memory", "chk_triage_hash_exes"):
+            if hasattr(self, name):
+                getattr(self, name).setEnabled(checked)
+
+    def _on_siem_toggled(self, checked: bool) -> None:
+        for name in ("txt_siem_host", "txt_siem_port", "cmb_siem_protocol", "chk_siem_cef"):
+            if hasattr(self, name):
+                getattr(self, name).setEnabled(checked)
+
+    # ── File pickers ─────────────────────────────────────────────────
 
     def select_key(self):
         fname, _ = QFileDialog.getOpenFileName(self, "Select SSH Key", "", "PEM Files (*.pem);;All Files (*)")
         if fname and hasattr(self, "txt_key"):
             self.txt_key.setText(fname)
+
+    def select_signing_key(self):
+        fname, _ = QFileDialog.getOpenFileName(self, "Select Ed25519 Signing Key", "", "Key Files (*.key);;All Files (*)")
+        if fname and hasattr(self, "txt_signing_key"):
+            self.txt_signing_key.setText(fname)
+
+    # ── Logging ───────────────────────────────────────────────────────
 
     def log(self, msg, level="INFO", event_type="GENERAL", hash_context=None):
         try:
@@ -236,6 +309,8 @@ class ForensicApp(QMainWindow):
             except OSError:
                 pass
 
+    # ── Validation ────────────────────────────────────────────────────
+
     def validate_network_inputs(self, ip, user):
         ipv4_re = r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
         if not re.match(ipv4_re, ip):
@@ -245,6 +320,8 @@ class ForensicApp(QMainWindow):
             QMessageBox.warning(self, "Validation Error", "Invalid SSH Username format.")
             return False
         return True
+
+    # ── Disk Discovery ────────────────────────────────────────────────
 
     def discover_disks(self):
         ip = self.txt_ip.text().strip() if hasattr(self, "txt_ip") else ""
@@ -290,6 +367,8 @@ class ForensicApp(QMainWindow):
             if hasattr(self, "btn_discover"):
                 self.btn_discover.setEnabled(True)
 
+    # ── Acquisition ───────────────────────────────────────────────────
+
     def start_process(self):
         ip = self.txt_ip.text().strip() if hasattr(self, "txt_ip") else ""
         user = self.txt_user.text().strip() if hasattr(self, "txt_user") else ""
@@ -309,6 +388,12 @@ class ForensicApp(QMainWindow):
             QMessageBox.warning(self, "Workflow Error", str(e))
             return
 
+        # ── Read all options ─────────────────────────────────────────
+
+        # Format (from dropdown)
+        format_label = self.cmb_format.currentText() if hasattr(self, "cmb_format") else "RAW (.raw)"
+        self.format_type = _FORMAT_MAP.get(format_label, "RAW")
+
         throttle_limit = 0.0
         if hasattr(self, "chk_throttle") and self.chk_throttle.isChecked():
             try:
@@ -317,25 +402,68 @@ class ForensicApp(QMainWindow):
                 QMessageBox.warning(self, "Validation Error", "Please enter a valid numeric value for Bandwidth Limit.")
                 return
 
-        safe_mode = hasattr(self, "chk_safety") and self.chk_safety.isChecked()
-        run_triage = hasattr(self, "chk_triage") and self.chk_triage.isChecked()
-        verify_hash = hasattr(self, "chk_verify") and self.chk_verify.isChecked()
-        write_blocker = hasattr(self, "chk_writeblock") and self.chk_writeblock.isChecked()
+        safe_mode      = hasattr(self, "chk_safety")    and self.chk_safety.isChecked()
+        verify_hash    = hasattr(self, "chk_verify")    and self.chk_verify.isChecked()
+        write_blocker  = hasattr(self, "chk_writeblock") and self.chk_writeblock.isChecked()
+        run_triage     = hasattr(self, "chk_triage")    and self.chk_triage.isChecked()
 
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Acquisition Format")
-        msg.setText("Select the target evidence format:")
-        btn_e01 = msg.addButton("E01 (EnCase)", QMessageBox.ButtonRole.ActionRole)
-        btn_raw = msg.addButton("RAW (.raw)", QMessageBox.ButtonRole.ActionRole)
-        msg.exec()
+        triage_network   = (not run_triage) or (hasattr(self, "chk_triage_network")   and self.chk_triage_network.isChecked())
+        triage_processes = (not run_triage) or (hasattr(self, "chk_triage_processes") and self.chk_triage_processes.isChecked())
+        triage_memory    = run_triage       and (hasattr(self, "chk_triage_memory")    and self.chk_triage_memory.isChecked())
+        triage_hash_exes = (not run_triage) or (hasattr(self, "chk_triage_hash_exes") and self.chk_triage_hash_exes.isChecked())
 
-        self.format_type = "E01" if msg.clickedButton() == btn_e01 else "RAW"
+        # Signing key
+        signing_key = ""
+        if hasattr(self, "txt_signing_key"):
+            signing_key = self.txt_signing_key.text().strip()
+
+        # SIEM / Syslog
+        siem_enabled = hasattr(self, "chk_siem") and self.chk_siem.isChecked()
+        siem_host    = self.txt_siem_host.text().strip()       if siem_enabled and hasattr(self, "txt_siem_host")      else ""
+        siem_port_s  = self.txt_siem_port.text().strip()       if siem_enabled and hasattr(self, "txt_siem_port")      else "514"
+        siem_proto   = self.cmb_siem_protocol.currentText()    if siem_enabled and hasattr(self, "cmb_siem_protocol")  else "UDP"
+        siem_cef     = siem_enabled and hasattr(self, "chk_siem_cef") and self.chk_siem_cef.isChecked()
+
+        if siem_enabled and not siem_host:
+            QMessageBox.warning(self, "Validation Error", "SIEM host is required when SIEM forwarding is enabled.")
+            return
+
+        try:
+            siem_port = int(siem_port_s) if siem_port_s else 514
+        except ValueError:
+            QMessageBox.warning(self, "Validation Error", "SIEM port must be a number.")
+            return
+
+        # ── Rebuild ForensicLogger with SIEM handler if needed ───────
+        if siem_enabled and siem_host:
+            from rfi.audit.syslog_handler import SyslogHandler
+            syslog_handler = SyslogHandler(
+                host=siem_host,
+                port=siem_port,
+                protocol=siem_proto,
+                cef_mode=siem_cef,
+            )
+            # Re-create logger with syslog (session is already bound, swap handler only)
+            self.logger._syslog = syslog_handler
+            self.log(f"[*] SIEM forwarding enabled → {siem_host}:{siem_port} ({siem_proto}{'  CEF' if siem_cef else ''})", "INFO", "SIEM_CONNECTED")
+
+        # ── Apply signing key to logger ───────────────────────────────
+        if signing_key:
+            if not os.path.isfile(signing_key):
+                QMessageBox.warning(self, "Validation Error", f"Signing key not found:\n{signing_key}")
+                return
+            self.logger._signing_key_path = signing_key
+            self.log(f"[*] Audit signing key loaded: {os.path.basename(signing_key)}", "INFO", "SIGNING_KEY_SET")
+
+        # ── Build output filename ─────────────────────────────────────
         timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        ext = _FORMAT_EXT.get(self.format_type, ".raw")
         base_filename = os.path.join(self.output_dir, f"evidence_{self.case_no}_{timestamp_str}")
-
-        self.target_filename = base_filename + (".E01" if self.format_type == "E01" else ".raw")
+        self.target_filename = base_filename + ext
+        # EwfWriter takes base path without extension; AFF4Writer and RawWriter take full path
         output_file = base_filename if self.format_type == "E01" else self.target_filename
 
+        # ── UI state ──────────────────────────────────────────────────
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.progressBar.setValue(0)
@@ -344,26 +472,37 @@ class ForensicApp(QMainWindow):
         self.log("--- [ STARTING ACQUISITION ] ---", "INFO", "ACQUISITION_START")
         self.log(f"Format: {self.format_type} | Target: {disk}", "INFO", "ACQUISITION_PARAMS")
         self.log(
-            f"Safe Mode: {safe_mode} | Verify Hash: {verify_hash} | Triage: {run_triage} | Throttle: {throttle_limit} | Write-Blocker: {write_blocker}",
-            "INFO",
-            "ACQUISITION_PARAMS",
+            f"Safe: {safe_mode} | Verify: {verify_hash} | Triage: {run_triage} | "
+            f"Throttle: {throttle_limit} | WBlock: {write_blocker}",
+            "INFO", "ACQUISITION_PARAMS",
         )
+        if run_triage:
+            self.log(
+                f"Triage → Network: {triage_network} | Processes: {triage_processes} | "
+                f"Memory: {triage_memory} | HashExes: {triage_hash_exes}",
+                "INFO", "TRIAGE_PARAMS",
+            )
 
+        # ── Launch worker ─────────────────────────────────────────────
         self.worker = AcquisitionWorker(
-            ip,
-            user,
-            key,
-            disk,
-            output_file,
-            self.format_type,
-            self.case_no,
-            self.examiner,
-            throttle_limit,
-            safe_mode,
-            run_triage,
-            self.output_dir,
-            verify_hash,
-            write_blocker,
+            ip=ip,
+            user=user,
+            key_path=key,
+            disk=disk,
+            output_file=output_file,
+            format_type=self.format_type,
+            case_no=self.case_no,
+            examiner=self.examiner,
+            throttle_limit=throttle_limit,
+            safe_mode=safe_mode,
+            run_triage=run_triage,
+            triage_network=triage_network,
+            triage_processes=triage_processes,
+            triage_memory=triage_memory,
+            triage_hash_exes=triage_hash_exes,
+            output_dir=self.output_dir,
+            verify_hash=verify_hash,
+            write_blocker=write_blocker,
         )
         self.worker.progress_signal.connect(self.update_progress_ui)
         self.worker.finished_signal.connect(self.on_acquisition_finished)
@@ -401,7 +540,6 @@ class ForensicApp(QMainWindow):
         remote_sha256 = data.get("remote_sha256", "SKIPPED")
         hash_match = data.get("hash_match", None)
 
-        # Session: transition through verification → seal
         verify_hash = hasattr(self, "chk_verify") and self.chk_verify.isChecked()
         try:
             if verify_hash and remote_sha256 != "SKIPPED":
@@ -462,7 +600,6 @@ class ForensicApp(QMainWindow):
 
         ReportEngine.generate_reports(report_data)
 
-        # Session: finalize
         try:
             self.session.finalize()
         except SessionStateError as e:
