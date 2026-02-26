@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# Quick launcher for RFI CLI acquisition
-# Usage: ./rfi-acquire --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem --disk /dev/sda ...
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec python3 -m rfi.cli.acquire "$@"

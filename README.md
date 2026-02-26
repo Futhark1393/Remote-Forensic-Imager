@@ -1,10 +1,10 @@
-# Remote Forensic Imager (RFI)
+# ForenXtract (FX)
 
-![CI](https://github.com/Futhark1393/Remote-Forensic-Imager/actions/workflows/python-ci.yml/badge.svg)
+![CI](https://github.com/Futhark1393/ForenXtract/actions/workflows/python-ci.yml/badge.svg)
 
 **Author:** Futhark1393 · **Version:** 3.2.0 · **License:** MIT
 
-Remote Forensic Imager (RFI) is a **case-first remote disk acquisition framework** built with **Python + PyQt6**. It enforces structured forensic workflows through an explicit session state machine, generates a cryptographically hash-chained audit trail (JSONL), and produces TXT/PDF forensic reports.
+ForenXtract (FX) is a **case-first remote disk acquisition framework** built with **Python + PyQt6**. It enforces structured forensic workflows through an explicit session state machine, generates a cryptographically hash-chained audit trail (JSONL), and produces TXT/PDF forensic reports.
 
 ---
 
@@ -13,17 +13,17 @@ Remote Forensic Imager (RFI) is a **case-first remote disk acquisition framework
 ## Quick Install (Recommended)
 
 ~~~bash
-git clone https://github.com/Futhark1393/Remote-Forensic-Imager.git
-cd Remote-Forensic-Imager
-sudo bash RFI_install.sh
+git clone https://github.com/Futhark1393/ForenXtract.git
+cd ForenXtract
+sudo bash FX_install.sh
 ~~~
 
 The installer:
 - Detects your distro (Fedora/RHEL or Debian/Ubuntu/Kali) and installs system dependencies
 - Downloads and compiles **libewf** (E01 format support)
 - Creates a Python **virtual environment** (`.venv/`)
-- Installs the RFI package inside the venv
-- Symlinks `rfi`, `rfi-acquire`, `rfi-verify` → `/usr/local/bin` (available system-wide)
+- Installs the FX package inside the venv
+- Symlinks `fx`, `fx-acquire`, `fx-verify` → `/usr/local/bin` (available system-wide)
 - Creates an application menu shortcut
 
 ### Install Options
@@ -36,17 +36,17 @@ The installer:
 | `--with-lz4` | Also install `lz4` for compression support |
 
 ~~~bash
-sudo bash RFI_install.sh --no-ewf        # fast install, RAW only
-sudo bash RFI_install.sh --with-aff4     # full install + AFF4
-sudo bash RFI_install.sh --with-lz4      # full install + LZ4 compression
+sudo bash FX_install.sh --no-ewf        # fast install, RAW only
+sudo bash FX_install.sh --with-aff4     # full install + AFF4
+sudo bash FX_install.sh --with-lz4      # full install + LZ4 compression
 ~~~
 
 After install, open a **new terminal** and:
 
 ~~~bash
-rfi                  # Launch GUI
-rfi-acquire --help   # Headless acquisition
-rfi-verify --help    # Audit chain verification
+fx                  # Launch GUI
+fx-acquire --help   # Headless acquisition
+fx-verify --help    # Audit chain verification
 ~~~
 
 ## Manual Install
@@ -57,8 +57,8 @@ rfi-verify --help    # Audit chain verification
 ### 1) Clone
 
 ~~~bash
-git clone https://github.com/Futhark1393/Remote-Forensic-Imager.git
-cd Remote-Forensic-Imager
+git clone https://github.com/Futhark1393/ForenXtract.git
+cd ForenXtract
 ~~~
 
 ### 2) System Dependencies
@@ -114,7 +114,7 @@ pip install -e ".[aff4]"
 ## GUI Mode
 
 ~~~bash
-rfi
+fx
 # or without system install:
 python main_qt6.py
 ~~~
@@ -122,7 +122,7 @@ python main_qt6.py
 ## CLI Mode (Headless)
 
 ~~~bash
-rfi-acquire \
+fx-acquire \
   --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
   --disk /dev/sda --output-dir ./evidence \
   --case 2026-001 --examiner "Investigator" \
@@ -135,7 +135,7 @@ rfi-acquire \
 
 ## v3.2.0 — LZ4 Compression Support
 
-![RFI v3.1.0 GUI](screenshots/main_ui_v310.png)
+![ForenXtract v3.2.0 GUI](screenshots/main_ui_v310.png)
 
 The GUI now mirrors all CLI capabilities across 6 structured sections:
 
@@ -160,7 +160,7 @@ The GUI now mirrors all CLI capabilities across 6 structured sections:
 
 A detailed engineering write-up covering architecture decisions, audit trail hash-chain model, and threat considerations:
 
-👉 https://kemalsebzeci-site.vercel.app/blog/rfi-architecture
+👉 https://kemalsebzeci-site.vercel.app/blog/fx-architecture
 
 ---
 
@@ -196,7 +196,7 @@ Illegal transitions raise `SessionStateError` and halt operation.
 
 # CLI Tooling
 
-## `rfi-acquire` — Headless Acquisition
+## `fx-acquire` — Headless Acquisition
 
 All parameters:
 
@@ -235,7 +235,7 @@ All parameters:
 Example with triage + SIEM:
 
 ~~~bash
-rfi-acquire \
+fx-acquire \
   --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
   --disk /dev/sda --output-dir ./evidence \
   --case 2026-001 --examiner "Investigator" \
@@ -243,12 +243,12 @@ rfi-acquire \
   --siem-host 10.0.0.100 --siem-port 514 --siem-protocol TCP
 ~~~
 
-## `rfi-verify` — Audit Chain Verification
+## `fx-verify` — Audit Chain Verification
 
 ~~~bash
-rfi-verify AuditTrail_CASE_SESSION.jsonl
-rfi-verify AuditTrail_CASE_SESSION.jsonl --pubkey rfi_signing.pub
-rfi-verify AuditTrail_CASE_SESSION.jsonl --json   # machine-readable output
+fx-verify AuditTrail_CASE_SESSION.jsonl
+fx-verify AuditTrail_CASE_SESSION.jsonl --pubkey fx_signing.pub
+fx-verify AuditTrail_CASE_SESSION.jsonl --json   # machine-readable output
 ~~~
 
 Exit codes: `0` = PASS · `2` = FAIL (tamper detected) · `1` = Error
@@ -271,7 +271,7 @@ In all formats, evidence hash (MD5 + SHA-256) is computed on **raw disk data _be
 ## Generate Signing Keypair
 
 ~~~bash
-python -c "from rfi.audit.signing import generate_signing_keypair; generate_signing_keypair('.')"
+python -c "from fx.audit.signing import generate_signing_keypair; generate_signing_keypair('.')"
 ~~~
 
 ---
@@ -287,17 +287,17 @@ Volatile evidence collected **before** acquisition. All operations are strictly 
 | Memory | `/proc/meminfo`, modules, kcore stream | `MemoryState_<CASE>_<UTC>.json` |
 
 > [!NOTE]
-> RFI **never uploads kernel modules** to the target. LiME is only used if already loaded by an administrator before RFI connects.
+> ForenXtract **never uploads kernel modules** to the target. LiME is only used if already loaded by an administrator before ForenXtract connects.
 
 ---
 
 # Architecture
 
 ~~~text
-rfi/
+fx/
 ├── cli/                        # Headless CLI tools
-│   ├── acquire.py              # rfi-acquire (no Qt dependency)
-│   └── verify.py               # rfi-verify (chain + sig verification)
+│   ├── acquire.py              # fx-acquire (no Qt dependency)
+│   └── verify.py               # fx-verify (chain + sig verification)
 ├── triage/                     # Live triage collectors (read-only)
 │   ├── orchestrator.py
 │   ├── network.py

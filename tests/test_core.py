@@ -1,4 +1,4 @@
-# Tests for rfi core modules: Session, StreamHasher, RawWriter, policy helpers.
+# Tests for ForenXtract (FX) core modules: Session, StreamHasher, RawWriter, policy helpers.
 # Tests for audit: ForensicLogger, Ed25519 signing.
 # Tests for report: ReportEngine TXT/PDF generation.
 
@@ -8,13 +8,13 @@ import os
 import tempfile
 import pytest
 
-from rfi.core.session import Session, SessionState, SessionStateError
-from rfi.core.hashing import StreamHasher
-from rfi.core.acquisition.raw import RawWriter
-from rfi.core.acquisition.lz4_writer import LZ4Writer, LZ4_AVAILABLE
-from rfi.core.policy import build_dd_command
-from rfi.audit.logger import ForensicLogger, ForensicLoggerError
-from rfi.audit.verify import AuditChainVerifier
+from fx.core.session import Session, SessionState, SessionStateError
+from fx.core.hashing import StreamHasher
+from fx.core.acquisition.raw import RawWriter
+from fx.core.acquisition.lz4_writer import LZ4Writer, LZ4_AVAILABLE
+from fx.core.policy import build_dd_command
+from fx.audit.logger import ForensicLogger, ForensicLoggerError
+from fx.audit.verify import AuditChainVerifier
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -349,7 +349,7 @@ class TestForensicLogger:
 class TestAuditSigning:
     def test_keygen_sign_verify_roundtrip(self):
         """Generate keypair → sign → verify must pass."""
-        from rfi.audit.signing import (
+        from fx.audit.signing import (
             generate_signing_keypair,
             sign_audit_trail,
             verify_audit_signature,
@@ -377,7 +377,7 @@ class TestAuditSigning:
 
     def test_tampered_file_fails_signature(self):
         """Modifying the file after signing must fail verification."""
-        from rfi.audit.signing import (
+        from fx.audit.signing import (
             generate_signing_keypair,
             sign_audit_trail,
             verify_audit_signature,
@@ -400,7 +400,7 @@ class TestAuditSigning:
 
     def test_missing_sig_file(self):
         """Verify must fail gracefully when .sig file is missing."""
-        from rfi.audit.signing import verify_audit_signature
+        from fx.audit.signing import verify_audit_signature
 
         with tempfile.TemporaryDirectory() as tmpdir:
             audit_path = os.path.join(tmpdir, "audit.jsonl")
@@ -442,7 +442,7 @@ class TestReportEngine:
         }
 
     def test_txt_report_generated(self):
-        from rfi.report.report_engine import ReportEngine
+        from fx.report.report_engine import ReportEngine
 
         with tempfile.TemporaryDirectory() as tmpdir:
             data = self._sample_report_data(tmpdir)
@@ -454,7 +454,7 @@ class TestReportEngine:
             assert "FORENSIC ACQUISITION REPORT" in content
 
     def test_pdf_report_generated(self):
-        from rfi.report.report_engine import ReportEngine
+        from fx.report.report_engine import ReportEngine
 
         with tempfile.TemporaryDirectory() as tmpdir:
             data = self._sample_report_data(tmpdir)

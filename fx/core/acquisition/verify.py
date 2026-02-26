@@ -3,7 +3,7 @@
 
 import paramiko
 
-from rfi.core.policy import ssh_exec
+from fx.core.policy import ssh_exec
 
 
 def verify_source_hash(

@@ -1,5 +1,5 @@
 # Author: Futhark1393
-# Description: Syslog / SIEM forwarding handler for RFI audit events.
+# Description: Syslog / SIEM forwarding handler for ForenXtract (FX) audit events.
 # Supports: RFC 5424 syslog (UDP/TCP) + CEF (Common Event Format) output.
 # Design: best-effort — connection failures warn but never halt acquisition.
 
@@ -23,12 +23,12 @@ _SEVERITY_MAP = {
 }
 
 _FACILITY_LOCAL0 = 16   # local0 — standard for security tools
-_APP_NAME = "rfi"
+_APP_NAME = "fx"
 
 
 class SyslogHandler:
     """
-    Forwards RFI audit log entries to a remote syslog / SIEM server.
+    Forwards ForenXtract (FX) audit log entries to a remote syslog / SIEM server.
 
     Protocols: UDP (RFC 5424, fire-and-forget) or TCP (RFC 6587 framing).
     Output format: standard RFC 5424 syslog or CEF (Common Event Format).
@@ -101,7 +101,7 @@ class SyslogHandler:
 
         # Structured data (SD) — embed case_no + event_id
         sd = (
-            f'[rfi@47218 '
+            f'[fx@47218 '
             f'case_no="{log_entry.get("case_no", "-")}" '
             f'event_id="{log_entry.get("event_id", "-")}" '
             f'source_module="{log_entry.get("source_module", "-")}"]'
@@ -140,7 +140,7 @@ class SyslogHandler:
         extension = " ".join(ext_parts)
 
         cef_msg = (
-            f"CEF:0|Futhark1393|RemoteForensicImager|3.0.0|"
+            f"CEF:0|Futhark1393|ForenXtract|3.2.0|"
             f"{event_type}|{message}|{cef_severity}|{extension}"
         )
         return cef_msg.encode("utf-8")

@@ -1,5 +1,5 @@
 # Author: Futhark1393
-# Description: Main GUI module for Remote Forensic Imager.
+# Description: Main GUI module for ForenXtract (FX).
 # Features: Case Wizard workflow, structured forensic logging, secure acquisition orchestration,
 #          optional write-blocker, post-acq verification, report generation, triage, SIEM, signing.
 
@@ -26,11 +26,11 @@ from PyQt6.uic import loadUi
 from PyQt6.QtGui import QTextCursor
 from qt_material import apply_stylesheet
 
-from rfi.deps.dependency_checker import run_dependency_check
-from rfi.audit.logger import ForensicLogger, ForensicLoggerError
-from rfi.report.report_engine import ReportEngine
-from rfi.ui.workers import AcquisitionWorker
-from rfi.core.session import Session, SessionState, SessionStateError
+from fx.deps.dependency_checker import run_dependency_check
+from fx.audit.logger import ForensicLogger, ForensicLoggerError
+from fx.report.report_engine import ReportEngine
+from fx.ui.workers import AcquisitionWorker
+from fx.core.session import Session, SessionState, SessionStateError
 
 
 _FORMAT_MAP = {
@@ -148,7 +148,7 @@ class ForensicApp(QMainWindow):
             QMessageBox.critical(self, "Error", f"UI file could not be loaded!\n{e}")
             sys.exit(1)
 
-        self.setWindowTitle("Remote Forensic Imager")
+        self.setWindowTitle("ForenXtract (FX)")
 
         # ── Session state machine ────────────────────────────────────
         self.session = Session()
@@ -438,7 +438,7 @@ class ForensicApp(QMainWindow):
 
         # ── Rebuild ForensicLogger with SIEM handler if needed ───────
         if siem_enabled and siem_host:
-            from rfi.audit.syslog_handler import SyslogHandler
+            from fx.audit.syslog_handler import SyslogHandler
             syslog_handler = SyslogHandler(
                 host=siem_host,
                 port=siem_port,

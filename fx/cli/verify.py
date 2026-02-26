@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # Author: Futhark1393
-# Description: rfi-verify — standalone CLI for forensic audit trail verification.
+# Description: fx-verify — standalone CLI for forensic audit trail verification.
 #              Verifies JSONL hash chain integrity and optional Ed25519 signature.
 #
 # Usage:
-#   rfi-verify AuditTrail_CASE_SESSION.jsonl
-#   rfi-verify AuditTrail_CASE_SESSION.jsonl --pubkey rfi_signing.pub
-#   rfi-verify AuditTrail_CASE_SESSION.jsonl --json
-#   rfi-verify AuditTrail_CASE_SESSION.jsonl --quiet
+#   fx-verify AuditTrail_CASE_SESSION.jsonl
+#   fx-verify AuditTrail_CASE_SESSION.jsonl --pubkey fx_signing.pub
+#   fx-verify AuditTrail_CASE_SESSION.jsonl --json
+#   fx-verify AuditTrail_CASE_SESSION.jsonl --quiet
 
 import argparse
 import json
@@ -16,8 +16,8 @@ import sys
 
 
 def _print_banner() -> None:
-    C1 = "\033[1;36m"
-    C2 = "\033[0;36m"
+    C1 = "\033[1;35m"
+    C2 = "\033[0;35m"
     DIM = "\033[2m"
     C0 = "\033[0m"
 
@@ -28,11 +28,11 @@ def _print_banner() -> None:
         f"{C2} ██╔══██╗ ██╔══╝   ██║",
         f"{C2} ██║  ██║ ██║      ██║",
         f"{C2} ╚═╝  ╚═╝ ╚═╝      ╚═╝",
-        f"{DIM} Remote Forensic Imager — Audit Verifier{C0}",
+        f"{DIM} ForenXtract — Audit Trail Verifier{C0}",
     ]
 
     info = [
-        f"  {C1}rfi-verify{C0}  v3.0.0",
+        f"  {C1}fx-verify{C0}  v3.2.0",
         f"  {DIM}JSONL hash-chain + Ed25519 signature verification{C0}",
     ]
 
@@ -46,8 +46,8 @@ def _print_banner() -> None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="rfi-verify",
-        description="Verify RFI JSONL audit chain integrity (prev_hash → entry_hash).",
+        prog="fx-verify",
+        description="Verify ForenXtract JSONL audit chain integrity (prev_hash → entry_hash).",
     )
     p.add_argument(
         "audit_file",
@@ -98,7 +98,7 @@ def main() -> int:
         return 2
 
     # ── Chain verification ────────────────────────────────────────────
-    from rfi.audit.verify import AuditChainVerifier
+    from fx.audit.verify import AuditChainVerifier
     try:
         chain_ok, chain_msg = AuditChainVerifier.verify_chain(path)
     except Exception as e:
@@ -130,7 +130,7 @@ def main() -> int:
     if args.pubkey:
         sig_path = path + ".sig"
         try:
-            from rfi.audit.signing import verify_audit_signature
+            from fx.audit.signing import verify_audit_signature
             sig_ok, sig_msg = verify_audit_signature(path, sig_path, args.pubkey)
         except ImportError:
             sig_ok, sig_msg = False, "cryptography library not installed (pip install cryptography)"

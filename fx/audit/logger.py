@@ -186,7 +186,7 @@ class ForensicLogger:
                 sig_path = None
                 if signing_key_path:
                     try:
-                        from rfi.audit.signing import sign_audit_trail
+                        from fx.audit.signing import sign_audit_trail
                         sig_path = sign_audit_trail(self.log_file_path, signing_key_path)
                     except Exception as e:
                         print(f"WARNING: signing failed: {e}", file=sys.stderr)

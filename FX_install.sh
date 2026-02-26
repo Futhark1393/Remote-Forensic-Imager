@@ -1,14 +1,14 @@
 #!/bin/bash
 # Author: Futhark1393
-# Description: Automated installer for Remote Forensic Imager v3.1.0
+# Description: Automated installer for ForenXtract (FX) v3.2.0
 # Installs system dependencies, compiles libewf (E01 optional),
 # creates a Python virtual environment, installs the package,
-# and symlinks rfi / rfi-acquire / rfi-verify to /usr/local/bin.
+# and symlinks fx / fx-acquire / fx-verify to /usr/local/bin.
 #
 # Usage:
-#   sudo bash RFI_install.sh            # full install (recommended)
-#   sudo bash RFI_install.sh --no-ewf   # skip libewf compilation
-#   sudo bash RFI_install.sh --with-aff4 # also install pyaff4
+#   sudo bash FX_install.sh            # full install (recommended)
+#   sudo bash FX_install.sh --no-ewf   # skip libewf compilation
+#   sudo bash FX_install.sh --with-aff4 # also install pyaff4
 
 set -euo pipefail
 
@@ -32,7 +32,7 @@ for arg in "$@"; do
         --no-ewf)    SKIP_EWF=true ;;
         --with-aff4) WITH_AFF4=true ;;
         --help|-h)
-            echo "Usage: sudo bash RFI_install.sh [--no-ewf] [--with-aff4]"
+            echo "Usage: sudo bash FX_install.sh [--no-ewf] [--with-aff4]"
             echo ""
             echo "  --no-ewf     Skip libewf compilation (skip E01 format support)"
             echo "  --with-aff4  Install pyaff4 for AFF4 format support"
@@ -42,7 +42,7 @@ done
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$APP_DIR/.venv"
-DESKTOP_FILE="$REAL_HOME/.local/share/applications/rfi.desktop"
+DESKTOP_FILE="$REAL_HOME/.local/share/applications/fx.desktop"
 
 C_CYAN='\033[1;36m'
 C_GREEN='\033[1;32m'
@@ -56,12 +56,14 @@ warn()    { echo -e "${C_YELLOW}[!]${C_RESET} $*"; }
 error()   { echo -e "${C_RED}[✗]${C_RESET} $*"; exit 1; }
 
 echo ""
-echo -e "${C_CYAN} ██████╗  ███████╗ ██╗${C_RESET}"
-echo -e "${C_CYAN} ██╔══██╗ ██╔════╝ ██║${C_RESET}"
-echo -e "${C_CYAN} ██████╔╝ █████╗   ██║${C_RESET}"
-echo -e "${C_CYAN} ██╔══██╗ ██╔══╝   ██║${C_RESET}"
-echo -e "${C_CYAN} ██║  ██║ ██║      ██║${C_RESET}"
-echo -e "${C_CYAN} ╚═╝  ╚═╝ ╚═╝      ╚═╝  v3.1.0 Installer${C_RESET}"
+echo -e "${C_CYAN}╔════════════════════════════════════╗${C_RESET}"
+echo -e "${C_CYAN}║ ███████╗  ██╗  ██╗                 ║${C_RESET}"
+echo -e "${C_CYAN}║ ██╔════╝  ╚██╗██╔╝   ForenXtract   ║${C_RESET}"
+echo -e "${C_CYAN}║ █████╗     ╚███╔╝    v3.2.0        ║${C_RESET}"
+echo -e "${C_CYAN}║ ██╔══╝     ██╔██╗    Installer     ║${C_RESET}"
+echo -e "${C_CYAN}║ ██║       ██╔╝ ██╗                 ║${C_RESET}"
+echo -e "${C_CYAN}║ ╚═╝       ╚═╝  ╚═╝                 ║${C_RESET}"
+echo -e "${C_CYAN}╚════════════════════════════════════╝${C_RESET}"
 echo ""
 
 # ── 1. Detect OS and install system packages ──────────────────────────────────
@@ -145,10 +147,10 @@ as_user python3 -m venv "$VENV_DIR"
 info "Upgrading pip..."
 as_user "$VENV_DIR/bin/pip" install --upgrade pip > /dev/null 2>&1
 
-# ── 4. Install RFI package ────────────────────────────────────────────────────
-info "Installing Remote Forensic Imager package..."
+# ── 4. Install ForenXtract (FX) package ────────────────────────────────────
+info "Installing ForenXtract (FX) package..."
 as_user "$VENV_DIR/bin/pip" install -e . > /dev/null 2>&1
-success "RFI package installed."
+success "FX package installed."
 
 # ── 5. Optional: AFF4 support ────────────────────────────────────────────────
 if [ "$WITH_AFF4" = true ]; then
@@ -161,9 +163,9 @@ else
 fi
 
 # ── 6. Symlink binaries to /usr/local/bin ────────────────────────────────────
-info "Creating system-wide CLI commands (rfi, rfi-acquire, rfi-verify)..."
+info "Creating system-wide CLI commands (fx, fx-acquire, fx-verify)..."
 
-for CMD in rfi rfi-acquire rfi-verify; do
+for CMD in fx fx-acquire fx-verify; do
     SRC="$VENV_DIR/bin/$CMD"
     DST="/usr/local/bin/$CMD"
     if [ -f "$SRC" ]; then
@@ -182,9 +184,9 @@ rm -f "$DESKTOP_FILE"
 # Write as real user (tee) so the file is owned by REAL_USER, not root
 as_user tee "$DESKTOP_FILE" > /dev/null << EOL
 [Desktop Entry]
-Version=3.1
+Version=3.2
 Type=Application
-Name=Remote Forensic Imager
+Name=ForenXtract (FX)
 GenericName=Forensic Disk Imager
 Comment=Remote live disk acquisition with tamper-evident audit trail
 Exec=$VENV_DIR/bin/python $APP_DIR/main_qt6.py
@@ -199,12 +201,12 @@ success "Desktop entry created."
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${C_GREEN}╔══════════════════════════════════════════════════╗${C_RESET}"
-echo -e "${C_GREEN}║   Remote Forensic Imager v3.1.0 — INSTALLED     ║${C_RESET}"
+echo -e "${C_GREEN}║   ForenXtract (FX) v3.2.0 — INSTALLED           ║${C_RESET}"
 echo -e "${C_GREEN}╚══════════════════════════════════════════════════╝${C_RESET}"
 echo ""
-echo -e "  ${C_CYAN}GUI mode:${C_RESET}        rfi"
-echo -e "  ${C_CYAN}CLI acquire:${C_RESET}     rfi-acquire --help"
-echo -e "  ${C_CYAN}CLI verify:${C_RESET}      rfi-verify <AuditTrail.jsonl>"
+echo -e "  ${C_CYAN}GUI mode:${C_RESET}        fx"
+echo -e "  ${C_CYAN}CLI acquire:${C_RESET}     fx-acquire --help"
+echo -e "  ${C_CYAN}CLI verify:${C_RESET}      fx-verify <AuditTrail.jsonl>"
 echo ""
 echo -e "  ${C_YELLOW}Note:${C_RESET} Open a new terminal or run 'hash -r' if commands are not found yet."
 echo ""

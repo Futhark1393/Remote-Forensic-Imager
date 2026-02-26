@@ -9,14 +9,14 @@ from typing import Callable
 
 import paramiko
 
-from rfi.core.hashing import StreamHasher
-from rfi.core.policy import ssh_exec, apply_write_blocker, build_dd_command
-from rfi.core.acquisition.raw import RawWriter
-from rfi.core.acquisition.lz4_writer import LZ4Writer, LZ4_AVAILABLE
-from rfi.core.acquisition.ewf import EwfWriter, EWF_AVAILABLE
-from rfi.core.acquisition.aff4 import AFF4Writer, AFF4_AVAILABLE
-from rfi.core.acquisition.verify import verify_source_hash
-from rfi.triage.orchestrator import TriageOrchestrator
+from fx.core.hashing import StreamHasher
+from fx.core.policy import ssh_exec, apply_write_blocker, build_dd_command
+from fx.core.acquisition.raw import RawWriter
+from fx.core.acquisition.lz4_writer import LZ4Writer, LZ4_AVAILABLE
+from fx.core.acquisition.ewf import EwfWriter, EWF_AVAILABLE
+from fx.core.acquisition.aff4 import AFF4Writer, AFF4_AVAILABLE
+from fx.core.acquisition.verify import verify_source_hash
+from fx.triage.orchestrator import TriageOrchestrator
 
 
 class AcquisitionError(Exception):

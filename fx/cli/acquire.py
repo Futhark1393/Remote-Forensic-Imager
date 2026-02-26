@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Futhark1393
 # Description: CLI-only forensic acquisition — no GUI, no Qt dependency.
-# Usage: rfi-acquire --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
+# Usage: fx-acquire --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
 #                    --disk /dev/sda --output-dir ./evidence \
 #                    --case 2026-001 --examiner "Investigator"
 
@@ -11,16 +11,16 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from rfi.core.session import Session, SessionStateError
-from rfi.core.acquisition.base import AcquisitionEngine, AcquisitionError
-from rfi.audit.logger import ForensicLogger, ForensicLoggerError
-from rfi.report.report_engine import ReportEngine
+from fx.core.session import Session, SessionStateError
+from fx.core.acquisition.base import AcquisitionEngine, AcquisitionError
+from fx.audit.logger import ForensicLogger, ForensicLoggerError
+from fx.report.report_engine import ReportEngine
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="rfi-acquire",
-        description="Remote Forensic Imager — headless CLI acquisition.",
+        prog="fx-acquire",
+        description="ForenXtract (FX) — headless CLI acquisition.",
     )
 
     # Required
@@ -97,7 +97,7 @@ def main() -> int:
     # ── Optional SIEM / Syslog handler ───────────────────────────────
     syslog_handler = None
     if args.siem_host:
-        from rfi.audit.syslog_handler import SyslogHandler
+        from fx.audit.syslog_handler import SyslogHandler
         syslog_handler = SyslogHandler(
             host=args.siem_host,
             port=args.siem_port,
@@ -139,7 +139,7 @@ def main() -> int:
         f"{C2} ██╔══██╗ ██╔══╝   ██║",
         f"{C2} ██║  ██║ ██║      ██║",
         f"{C2} ╚═╝  ╚═╝ ╚═╝      ╚═╝",
-        f"{DIM} Remote Forensic Imager{C0}",
+        f"{DIM} ForenXtract — Remote Forensic Acquisition{C0}",
     ]
 
     info = [

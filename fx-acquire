@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Quick launcher for ForenXtract CLI acquisition
+# Usage: ./fx-acquire --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem --disk /dev/sda ...
+
+exec python3 -m fx.cli.acquire "$@"

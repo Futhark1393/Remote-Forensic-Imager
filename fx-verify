@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Quick launcher for ForenXtract CLI verification
+# Usage: ./fx-verify AuditTrail_CASE_SESSION.jsonl [--pubkey signing.pub]
+
+exec python3 -m fx.cli.verify "$@"

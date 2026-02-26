@@ -26,8 +26,8 @@ def generate_signing_keypair(output_dir: str) -> tuple[str, str]:
     private_key = Ed25519PrivateKey.generate()
     public_key = private_key.public_key()
 
-    priv_path = os.path.join(output_dir, "rfi_signing.key")
-    pub_path = os.path.join(output_dir, "rfi_signing.pub")
+    priv_path = os.path.join(output_dir, "fx_signing.key")
+    pub_path = os.path.join(output_dir, "fx_signing.pub")
 
     with open(priv_path, "wb") as f:
         f.write(

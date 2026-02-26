@@ -15,7 +15,7 @@ import os
 import hashlib
 from datetime import datetime, timezone
 
-from rfi.core.policy import ssh_exec
+from fx.core.policy import ssh_exec
 
 
 class MemoryDumpCollector:
@@ -112,7 +112,7 @@ class MemoryDumpCollector:
             return {"source": "/proc/kcore", "status": "ERROR", "error": str(e)}
 
     def _check_lime_device(self, ssh) -> dict:
-        """Check if LiME device already exists (loaded by admin prior to RFI)."""
+        """Check if LiME device already exists (loaded by admin prior to ForenXtract)."""
         try:
             out, _, _ = ssh_exec(ssh, "ls /dev/lime* 2>/dev/null || echo NONE")
             if "NONE" in out or not out.strip():

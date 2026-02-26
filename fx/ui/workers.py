@@ -5,7 +5,7 @@
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from rfi.core.acquisition.base import AcquisitionEngine, AcquisitionError
+from fx.core.acquisition.base import AcquisitionEngine, AcquisitionError
 
 
 class AcquisitionWorker(QThread):

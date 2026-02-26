@@ -1,7 +1,7 @@
 [project]
-name = "remote-forensic-imager"
+name = "forenxtract"
 version = "3.2.0"
-description = "Remote forensic acquisition tool with structured audit logging and report generation"
+description = "ForenXtract (FX) — case-first remote forensic acquisition tool with structured audit logging and report generation"
 authors = [{ name = "Futhark1393" }]
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,9 +19,9 @@ dependencies = [
 aff4 = ["pyaff4"]
 
 [project.scripts]
-rfi = "rfi.ui.gui:main"
-rfi-acquire = "rfi.cli.acquire:main"
-rfi-verify = "rfi.cli.verify:main"
+fx = "fx.ui.gui:main"
+fx-acquire = "fx.cli.acquire:main"
+fx-verify = "fx.cli.verify:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

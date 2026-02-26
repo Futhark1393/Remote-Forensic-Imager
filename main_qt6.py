@@ -1,13 +1,13 @@
 # Author: Futhark1393
-# Entry Point for Remote Forensic Imager
+# Entry Point for ForenXtract (FX)
 # Enforces dependency check and Case Wizard before launching main UI.
 
 import sys
 from PyQt6.QtWidgets import QApplication, QMessageBox, QDialog
 from qt_material import apply_stylesheet
 
-from rfi.deps.dependency_checker import run_dependency_check
-from rfi.ui.gui import ForensicApp, CaseWizard
+from fx.deps.dependency_checker import run_dependency_check
+from fx.ui.gui import ForensicApp, CaseWizard
 
 
 def main():

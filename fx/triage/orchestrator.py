@@ -6,9 +6,9 @@ import os
 from datetime import datetime, timezone
 from typing import Callable
 
-from rfi.triage.network import NetworkStateCollector
-from rfi.triage.processes import ProcessListCollector
-from rfi.triage.memory import MemoryDumpCollector
+from fx.triage.network import NetworkStateCollector
+from fx.triage.processes import ProcessListCollector
+from fx.triage.memory import MemoryDumpCollector
 
 
 class TriageOrchestrator:

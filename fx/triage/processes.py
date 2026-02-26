@@ -6,7 +6,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from rfi.core.policy import ssh_exec
+from fx.core.policy import ssh_exec
 
 
 class ProcessListCollector:
@@ -106,7 +106,7 @@ class ProcessListCollector:
         txt_path = os.path.join(output_dir, f"ProcessList_{case_no}_{timestamp_utc}.txt")
         try:
             with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(f"=== RFI LIVE PROCESS LIST COLLECTION ===\n")
+                f.write(f"=== ForenXtract (FX) LIVE PROCESS LIST COLLECTION ===\n")
                 f.write(f"Case    : {case_no}\n")
                 f.write(f"Captured: {timestamp_utc}\n")
                 f.write(f"Count   : {len(processes)}\n\n")

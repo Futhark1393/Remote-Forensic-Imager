@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, ".")
-from rfi.core.acquisition.lz4_writer import LZ4Writer
+from fx.core.acquisition.lz4_writer import LZ4Writer
 import tempfile
 import os
 import lz4.frame
