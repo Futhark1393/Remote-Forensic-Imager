@@ -1,4 +1,0 @@
-[console_scripts]
-rfi = rfi.ui.gui:main
-rfi-acquire = rfi.cli.acquire:main
-rfi-verify = rfi.cli.verify:main

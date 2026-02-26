@@ -1,12 +1,23 @@
 *.pem
 *.raw
 *.E01
+*.aff4
 
 AuditTrail_*.jsonl
 temp_audit_*.jsonl
 AuditConsole_*.log
 Report_*.pdf
 Report_*.txt
+NetworkState_*.txt
+NetworkState_*.json
+ProcessList_*.txt
+ProcessList_*.json
+MemoryState_*.json
+MemoryDump_*.kcore
 
 __pycache__/
+*.pyc
 .venv/
+*.egg-info/
+dist/
+build/

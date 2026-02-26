@@ -1,8 +1,0 @@
-PyQt6>=6.6
-qt-material>=2.14
-paramiko>=3.0
-fpdf2>=2.7.0
-cryptography>=42.0
-
-[aff4]
-pyaff4

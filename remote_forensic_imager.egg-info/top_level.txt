@@ -1,3 +1,0 @@
-rfi
-screenshots
-tests
