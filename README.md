@@ -315,18 +315,60 @@ Unit tests cover:
 
 # Installation
 
-## 1) Clone
+## Quick Install (Recommended)
+
+~~~bash
+git clone https://github.com/Futhark1393/Remote-Forensic-Imager.git
+cd Remote-Forensic-Imager
+sudo bash RFI_install.sh
+~~~
+
+The installer:
+- Detects your distro (Fedora/RHEL or Debian/Ubuntu/Kali) and installs system dependencies
+- Downloads and compiles **libewf** (E01 format support)
+- Creates a Python **virtual environment** (`.venv/`)
+- Installs the RFI package inside the venv
+- Symlinks `rfi`, `rfi-acquire`, `rfi-verify` → `/usr/local/bin` (available system-wide)
+- Creates an application menu shortcut
+
+### Install Options
+
+| Flag | Effect |
+|------|--------|
+| *(none)* | Full install with E01 support |
+| `--no-ewf` | Skip libewf compilation (faster, RAW only) |
+| `--with-aff4` | Also install `pyaff4` for AFF4 format support |
+
+~~~bash
+# Fast install without E01
+sudo bash RFI_install.sh --no-ewf
+
+# Full install with AFF4 support
+sudo bash RFI_install.sh --with-aff4
+~~~
+
+After install, open a **new terminal** (or run `hash -r`) and:
+
+~~~bash
+rfi              # Launch GUI
+rfi-acquire --help   # Headless acquisition
+rfi-verify --help    # Audit chain verification
+~~~
+
+---
+
+## Manual Install
+
+### 1) Clone
 
 ~~~bash
 git clone https://github.com/Futhark1393/Remote-Forensic-Imager.git
 cd Remote-Forensic-Imager
 ~~~
 
----
+### 2) System Dependencies (Linux)
 
-## 2) System Dependencies (Linux)
-
-### Ubuntu / Debian / Kali
+**Ubuntu / Debian / Kali**
 
 ~~~bash
 sudo apt update
@@ -338,74 +380,38 @@ sudo apt install -y \
   libsm6 libice6 libfontconfig1 libfreetype6
 ~~~
 
-### Fedora
+**Fedora**
 
 ~~~bash
 sudo dnf install -y qt6-qtbase qt6-qtbase-gui mesa-libEGL mesa-libGL
 ~~~
 
----
-
-## 3) Python Dependencies
+### 3) Python Virtual Environment
 
 ~~~bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-pip install -r requirements.txt
+pip install -e .
 ~~~
 
-Minimal install:
+### 4) Optional: E01 (EWF) Support
 
 ~~~bash
-pip install PyQt6 qt-material paramiko fpdf2
-~~~
-
----
-
-## 4) Optional: E01 (EWF) Support
-
-E01 imaging requires **libewf + Python bindings**.
-
-### Debian / Ubuntu / Kali
-
-~~~bash
-sudo apt install -y libewf2 python3-libewf
-~~~
-
-### Alternative (pip)
-
-~~~bash
+sudo apt install -y libewf2 python3-libewf  # Debian/Ubuntu/Kali
+# or
 pip install libewf-python
 ~~~
 
-If E01 bindings are not installed:
-
-- RAW acquisition works normally
-- E01 option will be unavailable
-
----
-
-## 5) Optional: AFF4 Support
-
-AFF4 imaging requires **pyaff4**:
+### 5) Optional: AFF4 Support
 
 ~~~bash
 pip install pyaff4
-~~~
-
-Or install with the optional extra:
-
-~~~bash
+# or
 pip install -e ".[aff4]"
 ~~~
 
-If pyaff4 is not installed:
 
-- RAW and E01 acquisition work normally
-- AFF4 option will be unavailable
-
----
 
 # Running
 
