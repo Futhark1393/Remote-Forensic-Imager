@@ -148,11 +148,17 @@ The GUI now mirrors all CLI capabilities across 6 structured sections:
 | 5 | Live Triage | **Granular checkboxes** — Network, Processes, Memory, Hash EXEs |
 | 6 | Advanced | **Signing key** picker + **SIEM/Syslog** fields (host, port, UDP/TCP, CEF) |
 
-### Earlier screenshots
+### Workflow Screens
 
 | Case Wizard | Disk Discovery | Acquisition Running |
 |:-----------:|:--------------:|:-------------------:|
 | ![Case Wizard](screenshots/case_wizard.png) | ![Disk Discovery](screenshots/disk_discovery.png) | ![Acquisition](screenshots/acquisition_running.png) |
+
+### CLI & Reports
+
+| CLI Banner | CLI Test Run | Report Preview |
+|:----------:|:------------:|:--------------:|
+| ![CLI Banner](screenshots/cli_banner.png) | ![CLI Tests](screenshots/cli_tests.png) | ![Report Preview](screenshots/report_preview.png) |
 
 ---
 

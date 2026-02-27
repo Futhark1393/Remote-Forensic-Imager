@@ -25,7 +25,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.uic import loadUi
 from PyQt6.QtGui import QTextCursor
-from qt_material import apply_stylesheet
 
 from fx.deps.dependency_checker import run_dependency_check
 from fx.audit.logger import ForensicLogger, ForensicLoggerError
@@ -617,19 +616,38 @@ class ForensicApp(QMainWindow):
 
 def main() -> None:
     py_missing, native_missing = run_dependency_check()
-    if py_missing or native_missing:
+    if py_missing:
         error_msg = "Missing Dependencies Detected:\n\n"
         if py_missing:
             error_msg += "Python Packages:\n" + "\n".join([f" - {p}" for p in py_missing]) + "\n"
-        if native_missing:
-            error_msg += "\nSystem Libraries:\n" + "\n".join([f" - {l}" for l in native_missing]) + "\n"
 
         app = QApplication(sys.argv)
         QMessageBox.critical(None, "Dependency Error", error_msg + "\n\nPlease install required components before running.")
         sys.exit(1)
 
     app = QApplication(sys.argv)
-    apply_stylesheet(app, theme="dark_teal.xml")
+
+    # Native libraries are optional at startup; they gate specific formats (e.g., E01/libewf).
+    # Warn, but allow the GUI to run so users can still acquire RAW/LZ4.
+    if native_missing:
+        warn_msg = (
+            "Optional system components are missing:\n\n"
+            + "\n".join([f" - {l}" for l in native_missing])
+            + "\n\nSome evidence formats may be unavailable (e.g., E01)."
+        )
+        QMessageBox.warning(None, "Optional Components Missing", warn_msg)
+
+    # qt-material generates icon resources under a cache directory.
+    # If the environment is read-only (restricted containers, sandboxing),
+    # don't crash the entire GUI just because theming cannot initialize.
+    try:
+        from qt_material import apply_stylesheet
+        cache_root = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+        theme_dir = os.path.join(cache_root, "forenxtract", "qt_material")
+        os.makedirs(theme_dir, exist_ok=True)
+        apply_stylesheet(app, theme="dark_teal.xml", parent="." + theme_dir)
+    except Exception:
+        pass
 
     wizard = CaseWizard()
     if wizard.exec() != QDialog.DialogCode.Accepted:

@@ -145,7 +145,12 @@ class AcquisitionEngine:
                     "Install with: pip install pyaff4"
                 )
             writer = AFF4Writer(self.output_file)
-        elif self.format_type == "E01" and EWF_AVAILABLE:
+        elif self.format_type == "E01":
+            if not EWF_AVAILABLE:
+                raise AcquisitionError(
+                    "E01 format selected but pyewf/libewf support is not available.\n"
+                    "Install system libewf and the Python bindings (pyewf)."
+                )
             writer = EwfWriter(self.output_file)
         elif self.format_type == "RAW+LZ4":
             if not LZ4_AVAILABLE:
