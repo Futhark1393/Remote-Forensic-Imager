@@ -23,5 +23,15 @@ fx = "fx.ui.gui:main"
 fx-acquire = "fx.cli.acquire:main"
 fx-verify = "fx.cli.verify:main"
 
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"fx.ui" = ["resources/*.ui"]

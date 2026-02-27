@@ -8,6 +8,7 @@ import os
 import re
 import paramiko
 from datetime import datetime, timezone
+from importlib import resources
 
 from PyQt6.QtWidgets import (
     QMainWindow,
@@ -141,9 +142,10 @@ class ForensicApp(QMainWindow):
     def __init__(self, case_no: str, examiner: str, evidence_dir: str):
         super().__init__()
 
-        ui_path = os.path.join(os.path.dirname(__file__), "resources", "forensic_qt6.ui")
         try:
-            loadUi(ui_path, self)
+            ui_ref = resources.files("fx.ui").joinpath("resources", "forensic_qt6.ui")
+            with resources.as_file(ui_ref) as ui_path:
+                loadUi(str(ui_path), self)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"UI file could not be loaded!\n{e}")
             sys.exit(1)
