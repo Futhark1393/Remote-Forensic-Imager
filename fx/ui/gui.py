@@ -1,8 +1,10 @@
-# Author: Futhark1393
+# Author: Kemal Sebzeci
 # Description: Main GUI module for ForenXtract (FX).
 # Features: Case Wizard workflow, structured forensic logging, secure acquisition orchestration,
 # Optional write-blocker, post-acq verification, report generation, triage, SIEM, signing.
+# Supports both Live (Remote/SSH) and Dead (Local) acquisition modes via tabbed interface.
 
+import subprocess
 import sys
 import os
 import re
@@ -31,7 +33,7 @@ from PyQt6.QtCore import Qt
 from fx.deps.dependency_checker import run_dependency_check
 from fx.audit.logger import ForensicLogger, ForensicLoggerError
 from fx.report.report_engine import ReportEngine
-from fx.ui.workers import AcquisitionWorker
+from fx.ui.workers import AcquisitionWorker, DeadAcquisitionWorker
 from fx.core.session import Session, SessionState, SessionStateError
 
 
@@ -190,6 +192,12 @@ class ForensicApp(QMainWindow):
         if hasattr(self, "btn_discover"):
             self.btn_discover.clicked.connect(self.discover_disks)
 
+        # Dead acquisition tab connections
+        if hasattr(self, "btn_dead_discover"):
+            self.btn_dead_discover.clicked.connect(self.discover_local_disks)
+        if hasattr(self, "btn_dead_image"):
+            self.btn_dead_image.clicked.connect(self.select_source_image)
+
         if hasattr(self, "btn_signing_key"):
             self.btn_signing_key.clicked.connect(self.select_signing_key)
 
@@ -301,6 +309,16 @@ class ForensicApp(QMainWindow):
         fname, _ = QFileDialog.getOpenFileName(self, "Select Ed25519 Signing Key", "", "Key Files (*.key);;All Files (*)")
         if fname and hasattr(self, "txt_signing_key"):
             self.txt_signing_key.setText(fname)
+
+    def select_source_image(self):
+        """Open a file picker for dead-acquisition source image."""
+        fname, _ = QFileDialog.getOpenFileName(
+            self, "Select Source Image",
+            "",
+            "Disk Images (*.raw *.img *.dd *.E01 *.aff4 *.raw.lz4);;All Files (*)",
+        )
+        if fname and hasattr(self, "txt_dead_image"):
+            self.txt_dead_image.setText(fname)
 
     def open_dashboard(self):
         """Open the generated triage dashboard in the default web browser."""
@@ -446,9 +464,63 @@ class ForensicApp(QMainWindow):
             if hasattr(self, "btn_discover"):
                 self.btn_discover.setEnabled(True)
 
+    # ── Local Disk Discovery (Dead Acquisition) ──────────────────────
+
+    def discover_local_disks(self):
+        """Detect locally attached block devices for dead acquisition."""
+        self.log("Probing local system for block devices...", "INFO", "RECON_LOCAL_START")
+        if hasattr(self, "btn_dead_discover"):
+            self.btn_dead_discover.setEnabled(False)
+        QApplication.processEvents()
+
+        try:
+            # Log full layout
+            result_log = subprocess.run(
+                ["lsblk", "-o", "NAME,SIZE,TYPE,MOUNTPOINT"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result_log.returncode == 0:
+                self.log(
+                    f"\n=== LOCAL DISK LAYOUT ===\n{result_log.stdout.strip()}\n==========================",
+                    "INFO", "RECON_LOCAL_RESULT",
+                )
+
+            # Parse device names
+            result_parse = subprocess.run(
+                ["lsblk", "-r", "-n", "-o", "NAME,TYPE"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result_parse.returncode == 0 and hasattr(self, "cmb_dead_disk"):
+                self.cmb_dead_disk.clear()
+                for line in result_parse.stdout.strip().split("\n"):
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        dev_name, dev_type = parts[0], parts[1]
+                        if dev_type in ("disk", "part"):
+                            self.cmb_dead_disk.addItem(f"/dev/{dev_name}")
+                self.log("Local disk dropdown populated successfully.", "INFO", "RECON_LOCAL_SUCCESS")
+
+        except subprocess.TimeoutExpired:
+            self.log("Local disk discovery timed out.", "ERROR", "RECON_LOCAL_FAILED")
+        except FileNotFoundError:
+            self.log("lsblk not found. Cannot auto-detect local disks.", "ERROR", "RECON_LOCAL_FAILED")
+        except Exception as e:
+            self.log(f"Local disk discovery failed: {str(e)}", "ERROR", "RECON_LOCAL_FAILED")
+        finally:
+            if hasattr(self, "btn_dead_discover"):
+                self.btn_dead_discover.setEnabled(True)
+
     # ── Acquisition ───────────────────────────────────────────────────
 
     def start_process(self):
+        """Route to live or dead acquisition based on the active tab."""
+        tab_index = self.tabWidget.currentIndex() if hasattr(self, "tabWidget") else 0
+        if tab_index == 0:
+            self._start_live_process()
+        else:
+            self._start_dead_process()
+
+    def _start_live_process(self):
         ip = self.txt_ip.text().strip() if hasattr(self, "txt_ip") else ""
         user = self.txt_user.text().strip() if hasattr(self, "txt_user") else ""
         key = self.txt_key.text().strip() if hasattr(self, "txt_key") else ""
@@ -624,6 +696,152 @@ class ForensicApp(QMainWindow):
         self.worker.error_signal.connect(self.on_acquisition_error)
         self.worker.start()
 
+    # ── Dead Acquisition (Local) ──────────────────────────────────────
+
+    def _start_dead_process(self):
+        """Start a dead (local) forensic acquisition."""
+        # Determine source: image file overrides device combo
+        source_image = self.txt_dead_image.text().strip() if hasattr(self, "txt_dead_image") else ""
+        source_device = self.cmb_dead_disk.currentText().strip() if hasattr(self, "cmb_dead_disk") else ""
+        source_path = source_image or source_device
+
+        if not source_path:
+            QMessageBox.warning(self, "Validation Error", "Select a source device or image file.")
+            return
+
+        if not os.path.exists(source_path):
+            QMessageBox.warning(self, "Validation Error", f"Source not found:\n{source_path}")
+            return
+
+        # Session state guard
+        try:
+            self.session.begin_acquisition()
+        except SessionStateError as e:
+            QMessageBox.warning(self, "Workflow Error", str(e))
+            return
+
+        # ── Read shared options ──────────────────────────────────────
+        format_label = self.cmb_format.currentText() if hasattr(self, "cmb_format") else "RAW (.raw)"
+        self.format_type = _FORMAT_MAP.get(format_label, "RAW")
+
+        throttle_limit = 0.0
+        if hasattr(self, "chk_throttle") and self.chk_throttle.isChecked():
+            try:
+                throttle_limit = float(self.txt_throttle.text().strip())
+            except ValueError:
+                QMessageBox.warning(self, "Validation Error", "Please enter a valid numeric value for Bandwidth Limit.")
+                return
+
+        safe_mode     = hasattr(self, "chk_safety")     and self.chk_safety.isChecked()
+        verify_hash   = hasattr(self, "chk_verify")     and self.chk_verify.isChecked()
+        write_blocker = hasattr(self, "chk_writeblock") and self.chk_writeblock.isChecked()
+
+        # Safe Mode + Verify incompatibility (same as live)
+        if safe_mode and verify_hash:
+            reply = QMessageBox.question(
+                self,
+                "Incompatible Options",
+                "Safe Mode (zero-padding unreadable sectors) is incompatible with hash verification.\n\n"
+                "The source hash will NOT match the local image hash if Safe Mode is enabled.\n\n"
+                "• Yes → Disable verification (recommended with Safe Mode)\n"
+                "• No → Disable Safe Mode and keep verification\n"
+                "• Cancel → Abort and go back to settings",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                verify_hash = False
+                self.log("[*] Safe Mode detected: Verification disabled to avoid hash mismatch.", "WARNING", "ACQUISITION_PARAMS")
+            elif reply == QMessageBox.StandardButton.No:
+                safe_mode = False
+                self.log("[*] Disabling Safe Mode to enable verification.", "WARNING", "ACQUISITION_PARAMS")
+            else:
+                try:
+                    self.session.abort()
+                except SessionStateError:
+                    pass
+                return
+
+        # Signing key
+        signing_key = ""
+        if hasattr(self, "txt_signing_key"):
+            signing_key = self.txt_signing_key.text().strip()
+
+        # SIEM / Syslog
+        siem_enabled = hasattr(self, "chk_siem") and self.chk_siem.isChecked()
+        siem_host    = self.txt_siem_host.text().strip()       if siem_enabled and hasattr(self, "txt_siem_host")      else ""
+        siem_port_s  = self.txt_siem_port.text().strip()       if siem_enabled and hasattr(self, "txt_siem_port")      else "514"
+        siem_proto   = self.cmb_siem_protocol.currentText()    if siem_enabled and hasattr(self, "cmb_siem_protocol")  else "UDP"
+        siem_cef     = siem_enabled and hasattr(self, "chk_siem_cef") and self.chk_siem_cef.isChecked()
+
+        if siem_enabled and not siem_host:
+            QMessageBox.warning(self, "Validation Error", "SIEM host is required when SIEM forwarding is enabled.")
+            return
+
+        try:
+            siem_port = int(siem_port_s) if siem_port_s else 514
+        except ValueError:
+            QMessageBox.warning(self, "Validation Error", "SIEM port must be a number.")
+            return
+
+        if siem_enabled and siem_host:
+            from fx.audit.syslog_handler import SyslogHandler
+            syslog_handler = SyslogHandler(
+                host=siem_host, port=siem_port, protocol=siem_proto, cef_mode=siem_cef,
+            )
+            self.logger._syslog = syslog_handler
+            self.log(f"[*] SIEM forwarding enabled → {siem_host}:{siem_port} ({siem_proto}{'  CEF' if siem_cef else ''})", "INFO", "SIEM_CONNECTED")
+
+        if signing_key:
+            if not os.path.isfile(signing_key):
+                QMessageBox.warning(self, "Validation Error", f"Signing key not found:\n{signing_key}")
+                return
+            self.logger._signing_key_path = signing_key
+            self.log(f"[*] Audit signing key loaded: {os.path.basename(signing_key)}", "INFO", "SIGNING_KEY_SET")
+
+        # ── Build output filename ─────────────────────────────────────
+        timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        ext = _FORMAT_EXT.get(self.format_type, ".raw")
+
+        evidence_dir = os.path.join(self.output_dir, "evidence")
+        os.makedirs(evidence_dir, exist_ok=True)
+
+        base_filename = os.path.join(evidence_dir, f"evidence_{self.case_no}_{timestamp_str}")
+        self.target_filename = base_filename + ext
+        output_file = self.target_filename
+
+        # ── UI state ──────────────────────────────────────────────────
+        self.btn_start.setEnabled(False)
+        self.btn_stop.setEnabled(True)
+        self.progressBar.setValue(0)
+        self.start_time = datetime.now(timezone.utc)
+
+        self.log("--- [ STARTING DEAD ACQUISITION (LOCAL) ] ---", "INFO", "DEAD_ACQUISITION_START")
+        self.log(f"Source: {source_path}", "INFO", "DEAD_ACQUISITION_PARAMS")
+        self.log(f"Format: {self.format_type} | Output: {output_file}", "INFO", "DEAD_ACQUISITION_PARAMS")
+        self.log(
+            f"Safe: {safe_mode} | Verify: {verify_hash} | "
+            f"Throttle: {throttle_limit} | WBlock: {write_blocker}",
+            "INFO", "DEAD_ACQUISITION_PARAMS",
+        )
+
+        # ── Launch dead worker ────────────────────────────────────────
+        self.worker = DeadAcquisitionWorker(
+            source_path=source_path,
+            output_file=output_file,
+            format_type=self.format_type,
+            case_no=self.case_no,
+            examiner=self.examiner,
+            throttle_limit=throttle_limit,
+            safe_mode=safe_mode,
+            verify_hash=verify_hash,
+            write_blocker=write_blocker,
+        )
+        self.worker.progress_signal.connect(self.update_progress_ui)
+        self.worker.finished_signal.connect(self.on_acquisition_finished)
+        self.worker.error_signal.connect(self.on_acquisition_error)
+        self.worker.start()
+
     def stop_process(self):
         if self.worker and self.worker.isRunning():
             self.log("Abort requested by user. Terminating secure connection...", "WARNING", "ACQUISITION_ABORTED")
@@ -657,7 +875,8 @@ class ForensicApp(QMainWindow):
 
         sha256 = data.get("sha256_final", "ERROR")
         md5 = data.get("md5_final", "ERROR")
-        remote_sha256 = data.get("remote_sha256", "SKIPPED")
+        # Live uses "remote_sha256", dead uses "source_sha256"
+        remote_sha256 = data.get("remote_sha256", data.get("source_sha256", "SKIPPED"))
         hash_match = data.get("hash_match", None)
 
         verify_hash = hasattr(self, "chk_verify") and self.chk_verify.isChecked()
@@ -725,6 +944,10 @@ class ForensicApp(QMainWindow):
             "pdf_path": pdf_path,
             "output_dir": self.output_dir,
         }
+
+        # Acquisition mode indicator for reports
+        is_dead = (hasattr(self, "tabWidget") and self.tabWidget.currentIndex() == 1)
+        report_data["acquisition_mode"] = "DEAD (Local)" if is_dead else "LIVE (Remote)"
 
         # Extract triage JSON paths from triage_summary
         triage_summary = data.get("triage_summary", {})

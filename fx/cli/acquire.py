@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-# Author: Futhark1393
+# Author: Kemal Sebzeci
 # Description: CLI-only forensic acquisition — no GUI, no Qt dependency.
-# Usage: fx-acquire --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
-#                    --disk /dev/sda --output-dir ./evidence \
-#                    --case 2026-001 --examiner "Investigator"
+# Supports both Live (Remote/SSH) and Dead (Local) acquisition modes.
+#
+# Live:  fx-acquire --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
+#                   --disk /dev/sda --output-dir ./evidence \
+#                   --case 2026-001 --examiner "Investigator"
+#
+# Dead:  fx-acquire --dead --source /dev/sdb --output-dir ./evidence \
+#                   --case 2026-001 --examiner "Investigator"
 
 import argparse
 import os
@@ -13,6 +18,7 @@ from datetime import datetime, timezone
 
 from fx.core.session import Session, SessionStateError
 from fx.core.acquisition.base import AcquisitionEngine, AcquisitionError
+from fx.core.acquisition.dead import DeadAcquisitionEngine, DeadAcquisitionError
 from fx.audit.logger import ForensicLogger, ForensicLoggerError
 from fx.report.report_engine import ReportEngine
 
@@ -20,14 +26,20 @@ from fx.report.report_engine import ReportEngine
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="fx-acquire",
-        description="ForenXtract (FX) — headless CLI acquisition.",
+        description="ForenXtract (FX) — headless CLI acquisition (live & dead modes).",
     )
 
-    # Required
-    p.add_argument("--ip", required=True, help="Target IP address")
-    p.add_argument("--user", required=True, help="SSH username")
-    p.add_argument("--key", required=True, help="Path to SSH private key (.pem)")
-    p.add_argument("--disk", required=True, help="Target block device (e.g., /dev/sda)")
+    # Mode
+    p.add_argument("--dead", action="store_true", help="Dead (local) acquisition mode — image a locally attached device")
+    p.add_argument("--source", help="Source device or file for dead acquisition (e.g., /dev/sdb, image.raw)")
+
+    # Live-mode required (not needed for dead)
+    p.add_argument("--ip", help="Target IP address (live mode)")
+    p.add_argument("--user", help="SSH username (live mode)")
+    p.add_argument("--key", help="Path to SSH private key .pem (live mode)")
+    p.add_argument("--disk", help="Target block device on remote host (live mode, e.g., /dev/sda)")
+
+    # Shared required
     p.add_argument("--output-dir", required=True, help="Evidence output directory")
     p.add_argument("--case", required=True, help="Case number")
     p.add_argument("--examiner", required=True, help="Examiner name")
@@ -79,6 +91,22 @@ def cli_progress(data: dict) -> None:
 
 def main() -> int:
     args = parse_args()
+
+    # ── Mode validation ──────────────────────────────────────────────
+    is_dead = args.dead
+
+    if is_dead:
+        if not args.source:
+            print("ERROR: --source is required for dead acquisition mode.", file=sys.stderr)
+            return 1
+        if not os.path.exists(args.source):
+            print(f"ERROR: Source not found: {args.source}", file=sys.stderr)
+            return 1
+    else:
+        for name in ("ip", "user", "key", "disk"):
+            if not getattr(args, name, None):
+                print(f"ERROR: --{name} is required for live acquisition mode.", file=sys.stderr)
+                return 1
 
     safe_mode = True
     if args.no_safe_mode:
@@ -144,16 +172,17 @@ def main() -> int:
     info = [
         f"{C3}ForenXtract{C0}",
         f"{C3}v3.3.0{C0}",
-        f"{DIM}Remote Forensic Acquisition{C0}",
+        f"{DIM}{'Dead (Local) Acquisition' if is_dead else 'Remote Forensic Acquisition'}{C0}",
         "",
         f"{C3}Session{C0}   {DIM}{logger.session_id}{C0}",
         f"{C3}Case{C0}      {case_no}",
         f"{C3}Examiner{C0}  {examiner}",
-        f"{C3}Target{C0}    {args.user}@{args.ip}:{args.disk}",
+        f"{C3}Mode{C0}      {'DEAD (Local)' if is_dead else 'LIVE (Remote)'}",
+        f"{C3}Target{C0}    {args.source if is_dead else f'{args.user}@{args.ip}:{args.disk}'}",
         f"{C3}Format{C0}    {args.format}",
         f"{C3}Output{C0}    {output_dir}",
         f"{C3}Verify{C0}    {'✓' if args.verify else '✗'}  {C3}Safe{C0} {'✓' if safe_mode else '✗'}  {C3}WBlock{C0} {'✓' if args.write_blocker else '✗'}",
-        f"{C3}Triage{C0}    {'✓' if args.triage else '✗'}  {C3}SIEM{C0} {'✓ ' + args.siem_host if args.siem_host else '✗'}",
+        f"{C3}Triage{C0}    {'✓' if (not is_dead and args.triage) else '✗'}{' (N/A for dead)' if is_dead else ''}  {C3}SIEM{C0} {'✓ ' + args.siem_host if args.siem_host else '✗'}",
     ]
 
     print()
@@ -165,8 +194,9 @@ def main() -> int:
 
     logger.log("CLI acquisition initiated.", "INFO", "ACQUISITION_START", source_module="cli")
     logger.log(
-        f"Target: {args.user}@{args.ip}:{args.disk} | Format: {args.format} | "
-        f"Verify: {args.verify} | Safe: {safe_mode} | WriteBlock: {args.write_blocker}",
+        f"Mode: {'DEAD' if is_dead else 'LIVE'} | "
+        f"Target: {args.source if is_dead else f'{args.user}@{args.ip}:{args.disk}'} | "
+        f"Format: {args.format} | Verify: {args.verify} | Safe: {safe_mode} | WriteBlock: {args.write_blocker}",
         "INFO", "ACQUISITION_PARAMS", source_module="cli",
     )
 
@@ -188,33 +218,47 @@ def main() -> int:
         return 1
 
     start_time = datetime.now(timezone.utc)
-    print(f"\n  Starting acquisition at {start_time.strftime('%H:%M:%S UTC')}...\n")
+    print(f"\n  Starting {'dead' if is_dead else 'live'} acquisition at {start_time.strftime('%H:%M:%S UTC')}...\n")
 
-    engine = AcquisitionEngine(
-        ip=args.ip,
-        user=args.user,
-        key_path=args.key,
-        disk=args.disk,
-        output_file=output_file,
-        format_type=args.format,
-        case_no=case_no,
-        examiner=examiner,
-        throttle_limit=args.throttle,
-        safe_mode=safe_mode,
-        run_triage=args.triage,
-        triage_network=triage_network,
-        triage_processes=triage_processes,
-        triage_memory=triage_memory,
-        triage_hash_exes=triage_hash_exes,
-        output_dir=output_dir,
-        verify_hash=args.verify,
-        write_blocker=args.write_blocker,
-        on_progress=cli_progress,
-    )
+    if is_dead:
+        engine = DeadAcquisitionEngine(
+            source_path=args.source,
+            output_file=output_file,
+            format_type=args.format,
+            case_no=case_no,
+            examiner=examiner,
+            throttle_limit=args.throttle,
+            safe_mode=safe_mode,
+            verify_hash=args.verify,
+            write_blocker=args.write_blocker,
+            on_progress=cli_progress,
+        )
+    else:
+        engine = AcquisitionEngine(
+            ip=args.ip,
+            user=args.user,
+            key_path=args.key,
+            disk=args.disk,
+            output_file=output_file,
+            format_type=args.format,
+            case_no=case_no,
+            examiner=examiner,
+            throttle_limit=args.throttle,
+            safe_mode=safe_mode,
+            run_triage=args.triage,
+            triage_network=triage_network,
+            triage_processes=triage_processes,
+            triage_memory=triage_memory,
+            triage_hash_exes=triage_hash_exes,
+            output_dir=output_dir,
+            verify_hash=args.verify,
+            write_blocker=args.write_blocker,
+            on_progress=cli_progress,
+        )
 
     try:
         result = engine.run()
-    except AcquisitionError as e:
+    except (AcquisitionError, DeadAcquisitionError) as e:
         print(f"\n\n  ACQUISITION FAILED: {e}\n", file=sys.stderr)
         logger.log(f"Acquisition failed: {e}", "ERROR", "ACQUISITION_FAILED", source_module="cli")
         return 1
@@ -227,7 +271,7 @@ def main() -> int:
     sha256 = result["sha256_final"]
     md5 = result["md5_final"]
     total_bytes = result["total_bytes"]
-    remote_sha256 = result.get("remote_sha256", "SKIPPED")
+    remote_sha256 = result.get("remote_sha256", result.get("source_sha256", "SKIPPED"))
     hash_match = result.get("hash_match")
 
     duration = str(datetime.now(timezone.utc) - start_time).split(".")[0]
@@ -279,12 +323,13 @@ def main() -> int:
     report_data = {
         "case_no": case_no,
         "examiner": examiner,
-        "ip": args.ip,
+        "acquisition_mode": "DEAD (Local)" if is_dead else "LIVE (Remote)",
+        "ip": args.source if is_dead else args.ip,
         "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "duration": duration,
         "format_type": args.format,
         "target_filename": target_filename,
-        "triage_requested": args.triage,
+        "triage_requested": (not is_dead) and args.triage,
         "writeblock_requested": args.write_blocker,
         "throttle_enabled": args.throttle > 0,
         "throttle_val": str(args.throttle),

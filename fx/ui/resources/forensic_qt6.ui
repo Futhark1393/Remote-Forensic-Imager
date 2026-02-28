@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1180</width>
-    <height>820</height>
+    <width>1200</width>
+    <height>860</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,10 +16,11 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
 
+    <!-- ══════ LEFT PANEL ══════ -->
     <item>
      <layout class="QVBoxLayout" name="verticalLayout_left">
 
-      <!-- 1. Case Identification -->
+      <!-- 1. Case Identification (shared) -->
       <item>
        <widget class="QGroupBox" name="groupBox_case">
         <property name="title"><string>1. Case Identification</string></property>
@@ -40,67 +41,188 @@
        </widget>
       </item>
 
-      <!-- 2. Remote Server (SSH) -->
+      <!-- ══════ TAB WIDGET: Acquisition Modes ══════ -->
       <item>
-       <widget class="QGroupBox" name="groupBox_server">
-        <property name="title"><string>2. Remote Server (SSH)</string></property>
-        <layout class="QFormLayout" name="formLayout_server">
-         <item row="0" column="0"><widget class="QLabel" name="label_3"><property name="text"><string>Target IP:</string></property></widget></item>
-         <item row="0" column="1">
-          <widget class="QLineEdit" name="txt_ip">
-           <property name="placeholderText"><string>e.g., 13.51.178.166</string></property>
-          </widget>
-         </item>
-         <item row="1" column="0"><widget class="QLabel" name="label_4"><property name="text"><string>Username:</string></property></widget></item>
-         <item row="1" column="1">
-          <widget class="QLineEdit" name="txt_user">
-           <property name="placeholderText"><string>e.g., ubuntu / root</string></property>
-          </widget>
-         </item>
-         <item row="2" column="0"><widget class="QLabel" name="label_5"><property name="text"><string>SSH Key:</string></property></widget></item>
-         <item row="2" column="1">
-          <layout class="QHBoxLayout" name="horizontalLayout_key">
-           <item>
-            <widget class="QLineEdit" name="txt_key">
-             <property name="placeholderText"><string>Path to .pem file</string></property>
-            </widget>
-           </item>
-           <item><widget class="QPushButton" name="btn_file"><property name="text"><string>Select</string></property></widget></item>
-          </layout>
-         </item>
-        </layout>
+       <widget class="QTabWidget" name="tabWidget">
+        <property name="currentIndex"><number>0</number></property>
+
+        <!-- ══ TAB 0: Live Acquisition (Remote) ══ -->
+        <widget class="QWidget" name="tab_live">
+         <attribute name="title"><string>Live Acquisition (Remote)</string></attribute>
+         <layout class="QVBoxLayout" name="vLayout_tab_live">
+
+          <!-- Remote Server (SSH) -->
+          <item>
+           <widget class="QGroupBox" name="groupBox_server">
+            <property name="title"><string>Remote Server (SSH)</string></property>
+            <layout class="QFormLayout" name="formLayout_server">
+             <item row="0" column="0"><widget class="QLabel" name="label_3"><property name="text"><string>Target IP:</string></property></widget></item>
+             <item row="0" column="1">
+              <widget class="QLineEdit" name="txt_ip">
+               <property name="placeholderText"><string>e.g., 13.51.178.166</string></property>
+              </widget>
+             </item>
+             <item row="1" column="0"><widget class="QLabel" name="label_4"><property name="text"><string>Username:</string></property></widget></item>
+             <item row="1" column="1">
+              <widget class="QLineEdit" name="txt_user">
+               <property name="placeholderText"><string>e.g., ubuntu / root</string></property>
+              </widget>
+             </item>
+             <item row="2" column="0"><widget class="QLabel" name="label_5"><property name="text"><string>SSH Key:</string></property></widget></item>
+             <item row="2" column="1">
+              <layout class="QHBoxLayout" name="horizontalLayout_key">
+               <item>
+                <widget class="QLineEdit" name="txt_key">
+                 <property name="placeholderText"><string>Path to .pem file</string></property>
+                </widget>
+               </item>
+               <item><widget class="QPushButton" name="btn_file"><property name="text"><string>Select</string></property></widget></item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <!-- Evidence Target (Remote) -->
+          <item>
+           <widget class="QGroupBox" name="groupBox_disk">
+            <property name="title"><string>Evidence Target (Remote)</string></property>
+            <layout class="QVBoxLayout" name="verticalLayout_disk">
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_disk">
+               <item>
+                <widget class="QComboBox" name="cmb_disk">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="editable"><bool>true</bool></property>
+                </widget>
+               </item>
+               <item><widget class="QPushButton" name="btn_discover"><property name="text"><string>Auto-Detect (lsblk)</string></property></widget></item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <!-- Live Triage -->
+          <item>
+           <widget class="QGroupBox" name="groupBox_triage">
+            <property name="title"><string>Live Triage (read-only, pre-acquisition)</string></property>
+            <layout class="QVBoxLayout" name="verticalLayout_triage">
+             <item><widget class="QCheckBox" name="chk_triage"><property name="text"><string>Enable Live Triage</string></property></widget></item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_triage_sub">
+               <item><widget class="QLabel" name="label_triage_sub"><property name="text"><string>  Collect:</string></property></widget></item>
+               <item><widget class="QCheckBox" name="chk_triage_network"><property name="text"><string>Network</string></property></widget></item>
+               <item><widget class="QCheckBox" name="chk_triage_processes"><property name="text"><string>Processes</string></property></widget></item>
+               <item><widget class="QCheckBox" name="chk_triage_memory"><property name="text"><string>Memory</string></property></widget></item>
+               <item><widget class="QCheckBox" name="chk_triage_hash_exes"><property name="text"><string>Hash EXEs</string></property></widget></item>
+               <item>
+                <spacer name="horizontalSpacer_triage">
+                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                 <property name="sizeHint"><size><width>40</width><height>20</height></size></property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <item>
+           <spacer name="verticalSpacer_live">
+            <property name="orientation"><enum>Qt::Vertical</enum></property>
+            <property name="sizeHint"><size><width>20</width><height>10</height></size></property>
+           </spacer>
+          </item>
+
+         </layout>
+        </widget>
+
+        <!-- ══ TAB 1: Dead Acquisition (Local) ══ -->
+        <widget class="QWidget" name="tab_dead">
+         <attribute name="title"><string>Dead Acquisition (Local)</string></attribute>
+         <layout class="QVBoxLayout" name="vLayout_tab_dead">
+
+          <!-- Source Device (Local) -->
+          <item>
+           <widget class="QGroupBox" name="groupBox_dead_disk">
+            <property name="title"><string>Source Device</string></property>
+            <layout class="QVBoxLayout" name="verticalLayout_dead_disk">
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_dead_disk">
+               <item>
+                <widget class="QComboBox" name="cmb_dead_disk">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="editable"><bool>true</bool></property>
+                </widget>
+               </item>
+               <item><widget class="QPushButton" name="btn_dead_discover"><property name="text"><string>Auto-Detect (lsblk)</string></property></widget></item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_dead_info">
+               <property name="text"><string>Select a locally attached block device (e.g., /dev/sdb) for forensic imaging.</string></property>
+               <property name="wordWrap"><bool>true</bool></property>
+               <property name="styleSheet"><string>color: #888; font-style: italic;</string></property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <!-- Or: Source Image File -->
+          <item>
+           <widget class="QGroupBox" name="groupBox_dead_image">
+            <property name="title"><string>Or: Source Image / File</string></property>
+            <layout class="QVBoxLayout" name="verticalLayout_dead_image">
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_dead_image">
+               <item>
+                <widget class="QLineEdit" name="txt_dead_image">
+                 <property name="placeholderText"><string>Path to source image file (overrides device above)</string></property>
+                </widget>
+               </item>
+               <item><widget class="QPushButton" name="btn_dead_image"><property name="text"><string>Browse...</string></property></widget></item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_dead_image_info">
+               <property name="text"><string>Use this to re-image or convert an existing forensic image (e.g., RAW to E01).</string></property>
+               <property name="wordWrap"><bool>true</bool></property>
+               <property name="styleSheet"><string>color: #888; font-style: italic;</string></property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <item>
+           <spacer name="verticalSpacer_dead">
+            <property name="orientation"><enum>Qt::Vertical</enum></property>
+            <property name="sizeHint"><size><width>20</width><height>10</height></size></property>
+           </spacer>
+          </item>
+
+         </layout>
+        </widget>
+
        </widget>
       </item>
 
-      <!-- 3. Evidence Target -->
-      <item>
-       <widget class="QGroupBox" name="groupBox_disk">
-        <property name="title"><string>3. Evidence Target</string></property>
-        <layout class="QVBoxLayout" name="verticalLayout_disk">
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_disk">
-           <item>
-            <widget class="QComboBox" name="cmb_disk">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="editable"><bool>true</bool></property>
-            </widget>
-           </item>
-           <item><widget class="QPushButton" name="btn_discover"><property name="text"><string>Auto-Detect (lsblk)</string></property></widget></item>
-          </layout>
-         </item>
-        </layout>
-       </widget>
-      </item>
-
-      <!-- 4. Acquisition Options -->
+      <!-- ══════ SHARED: Acquisition Options ══════ -->
       <item>
        <widget class="QGroupBox" name="groupBox_options">
-        <property name="title"><string>4. Acquisition Options</string></property>
+        <property name="title"><string>Acquisition Options</string></property>
         <layout class="QVBoxLayout" name="verticalLayout_options">
 
          <!-- Format -->
@@ -124,8 +246,8 @@
           </layout>
          </item>
 
-         <item><widget class="QCheckBox" name="chk_safety"><property name="text"><string>Safe Mode (conv=noerror,sync)</string></property></widget></item>
-         <item><widget class="QCheckBox" name="chk_verify"><property name="text"><string>Verify Integrity (Remote Hash Match)</string></property><property name="toolTip"><string>Post-acquisition source hashing may mismatch on live disks; use snapshots/unmounted targets.</string></property></widget></item>
+         <item><widget class="QCheckBox" name="chk_safety"><property name="text"><string>Safe Mode (pad unreadable sectors with zeros)</string></property></widget></item>
+         <item><widget class="QCheckBox" name="chk_verify"><property name="text"><string>Verify Integrity (Post-Acquisition Hash Match)</string></property><property name="toolTip"><string>Re-read source and compare SHA-256 against on-the-fly stream hash.</string></property></widget></item>
          <item><widget class="QCheckBox" name="chk_writeblock"><property name="text"><string>Enable Software Write-Blocker</string></property></widget></item>
 
          <!-- Throttle -->
@@ -152,39 +274,10 @@
        </widget>
       </item>
 
-      <!-- 5. Live Triage -->
-      <item>
-       <widget class="QGroupBox" name="groupBox_triage">
-        <property name="title"><string>5. Live Triage (read-only, pre-acquisition)</string></property>
-        <layout class="QVBoxLayout" name="verticalLayout_triage">
-
-         <item><widget class="QCheckBox" name="chk_triage"><property name="text"><string>Enable Live Triage</string></property></widget></item>
-
-         <!-- Sub-options (enabled only when chk_triage checked) -->
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_triage_sub">
-           <item><widget class="QLabel" name="label_triage_sub"><property name="text"><string>  Collect:</string></property></widget></item>
-           <item><widget class="QCheckBox" name="chk_triage_network"><property name="text"><string>Network</string></property></widget></item>
-           <item><widget class="QCheckBox" name="chk_triage_processes"><property name="text"><string>Processes</string></property></widget></item>
-           <item><widget class="QCheckBox" name="chk_triage_memory"><property name="text"><string>Memory</string></property></widget></item>
-           <item><widget class="QCheckBox" name="chk_triage_hash_exes"><property name="text"><string>Hash EXEs</string></property></widget></item>
-           <item>
-            <spacer name="horizontalSpacer_triage">
-             <property name="orientation"><enum>Qt::Horizontal</enum></property>
-             <property name="sizeHint"><size><width>40</width><height>20</height></size></property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-
-        </layout>
-       </widget>
-      </item>
-
-      <!-- 6. Advanced (Signing + SIEM) -->
+      <!-- ══════ SHARED: Advanced ══════ -->
       <item>
        <widget class="QGroupBox" name="groupBox_advanced">
-        <property name="title"><string>6. Advanced</string></property>
+        <property name="title"><string>Advanced</string></property>
         <layout class="QVBoxLayout" name="verticalLayout_advanced">
 
          <!-- Signing Key -->
@@ -249,7 +342,7 @@
        </spacer>
       </item>
 
-      <!-- Action Buttons -->
+      <!-- ══════ SHARED: Action Buttons ══════ -->
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_actions">
         <item>
@@ -277,7 +370,7 @@
      </layout>
     </item>
 
-    <!-- Right: Console -->
+    <!-- ══════ RIGHT: Console ══════ -->
     <item>
      <widget class="QGroupBox" name="groupBox_log">
       <property name="title"><string>Live Acquisition Console</string></property>

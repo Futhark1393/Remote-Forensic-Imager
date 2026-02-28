@@ -9,6 +9,12 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 
 from fx.core.acquisition.base import AcquisitionEngine, AcquisitionError
+from fx.core.acquisition.dead import (
+    DeadAcquisitionEngine,
+    DeadAcquisitionError,
+    _get_source_size,
+    _apply_local_write_blocker,
+)
 from fx.core.acquisition.verify import verify_source_hash
 from fx.core.policy import ssh_exec, apply_write_blocker, build_dd_command
 from fx.core.hashing import StreamHasher
@@ -336,3 +342,234 @@ class TestAcquisitionEngine:
             )
             with pytest.raises(AcquisitionError, match="Max retries"):
                 engine.run()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Dead Acquisition Engine tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestDeadAcquisitionEngine:
+    """Tests for DeadAcquisitionEngine (local disk / image file imaging)."""
+
+    def test_dead_acquire_regular_file(self):
+        """Dead acquisition should successfully image a regular file."""
+        evidence_data = os.urandom(64 * 1024)  # 64 KB
+        progress_events = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "source.img")
+            dst = os.path.join(tmpdir, "output.raw")
+            with open(src, "wb") as f:
+                f.write(evidence_data)
+
+            engine = DeadAcquisitionEngine(
+                source_path=src,
+                output_file=dst,
+                format_type="RAW",
+                case_no="DEAD-001",
+                examiner="Test",
+                on_progress=lambda d: progress_events.append(d),
+            )
+            result = engine.run()
+
+            assert result["total_bytes"] == len(evidence_data)
+            assert len(result["sha256_final"]) == 64
+            assert len(result["md5_final"]) == 32
+            assert result["source_sha256"] == "SKIPPED"  # verify_hash=False
+            assert result["hash_match"] is None
+
+            with open(dst, "rb") as f:
+                assert f.read() == evidence_data
+
+            assert len(progress_events) > 0
+
+    def test_dead_acquire_with_verification(self):
+        """Verify hash should re-read source and compare SHA-256."""
+        evidence_data = os.urandom(32 * 1024)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "source.img")
+            dst = os.path.join(tmpdir, "output.raw")
+            with open(src, "wb") as f:
+                f.write(evidence_data)
+
+            engine = DeadAcquisitionEngine(
+                source_path=src,
+                output_file=dst,
+                format_type="RAW",
+                case_no="DEAD-002",
+                examiner="Test",
+                verify_hash=True,
+            )
+            result = engine.run()
+
+            assert result["hash_match"] is True
+            assert result["source_sha256"] == result["sha256_final"]
+
+    def test_dead_acquire_source_not_found(self):
+        """Missing source should raise DeadAcquisitionError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dst = os.path.join(tmpdir, "output.raw")
+            engine = DeadAcquisitionEngine(
+                source_path="/nonexistent/device",
+                output_file=dst,
+                format_type="RAW",
+                case_no="DEAD-003",
+                examiner="Test",
+            )
+            with pytest.raises(DeadAcquisitionError, match="Source not found"):
+                engine.run()
+
+    def test_dead_acquire_zero_size(self):
+        """Zero-byte source should raise DeadAcquisitionError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "empty.img")
+            dst = os.path.join(tmpdir, "output.raw")
+            with open(src, "wb") as f:
+                pass  # empty file
+
+            engine = DeadAcquisitionEngine(
+                source_path=src,
+                output_file=dst,
+                format_type="RAW",
+                case_no="DEAD-004",
+                examiner="Test",
+            )
+            with pytest.raises(DeadAcquisitionError, match="zero size"):
+                engine.run()
+
+    def test_dead_acquire_stop(self):
+        """Stopping mid-acquisition should raise DeadAcquisitionError."""
+        evidence_data = os.urandom(16 * 1024 * 1024)  # 16 MB
+        call_count = 0
+
+        def progress_and_stop(data):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                engine.stop()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "source.img")
+            dst = os.path.join(tmpdir, "output.raw")
+            with open(src, "wb") as f:
+                f.write(evidence_data)
+
+            engine = DeadAcquisitionEngine(
+                source_path=src,
+                output_file=dst,
+                format_type="RAW",
+                case_no="DEAD-005",
+                examiner="Test",
+                on_progress=progress_and_stop,
+            )
+            with pytest.raises(DeadAcquisitionError, match="aborted"):
+                engine.run()
+
+    def test_dead_acquire_lz4_format(self):
+        """Dead acquisition with LZ4 format (if available)."""
+        from fx.core.acquisition.lz4_writer import LZ4_AVAILABLE
+        if not LZ4_AVAILABLE:
+            pytest.skip("lz4 not installed")
+
+        evidence_data = os.urandom(32 * 1024)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "source.img")
+            dst = os.path.join(tmpdir, "output.raw.lz4")
+            with open(src, "wb") as f:
+                f.write(evidence_data)
+
+            engine = DeadAcquisitionEngine(
+                source_path=src,
+                output_file=dst,
+                format_type="RAW+LZ4",
+                case_no="DEAD-006",
+                examiner="Test",
+            )
+            result = engine.run()
+
+            assert result["total_bytes"] == len(evidence_data)
+            assert os.path.exists(dst)
+            # LZ4 compressed should be non-empty
+            assert os.path.getsize(dst) > 0
+
+    def test_dead_acquire_throttle(self):
+        """Throttle should slow down acquisition."""
+        evidence_data = os.urandom(8 * 1024)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "source.img")
+            dst = os.path.join(tmpdir, "output.raw")
+            with open(src, "wb") as f:
+                f.write(evidence_data)
+
+            engine = DeadAcquisitionEngine(
+                source_path=src,
+                output_file=dst,
+                format_type="RAW",
+                case_no="DEAD-007",
+                examiner="Test",
+                throttle_limit=100.0,  # 100 MB/s — exercises the throttle path without delay
+            )
+            result = engine.run()
+            assert result["total_bytes"] == len(evidence_data)
+
+
+class TestGetSourceSize:
+    """Tests for the _get_source_size helper."""
+
+    def test_regular_file_size(self):
+        """Should return correct size for regular files."""
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"x" * 12345)
+            f.flush()
+            path = f.name
+
+        try:
+            assert _get_source_size(path) == 12345
+        finally:
+            os.unlink(path)
+
+    def test_empty_file_size(self):
+        """Should return 0 for empty files."""
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            path = f.name
+
+        try:
+            assert _get_source_size(path) == 0
+        finally:
+            os.unlink(path)
+
+
+class TestLocalWriteBlocker:
+    """Tests for _apply_local_write_blocker."""
+
+    @patch("fx.core.acquisition.dead.subprocess.run")
+    def test_write_blocker_success(self, mock_run):
+        """Write blocker should succeed when both commands return 0."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stderr=""),
+            MagicMock(returncode=0, stdout="1", stderr=""),
+        ]
+        # Should not raise
+        _apply_local_write_blocker("/dev/sdb")
+        assert mock_run.call_count == 2
+
+    @patch("fx.core.acquisition.dead.subprocess.run")
+    def test_write_blocker_setro_failure(self, mock_run):
+        """Should raise when blockdev --setro fails."""
+        mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
+        with pytest.raises(DeadAcquisitionError, match="Write-blocker failed"):
+            _apply_local_write_blocker("/dev/sdb")
+
+    @patch("fx.core.acquisition.dead.subprocess.run")
+    def test_write_blocker_verify_failure(self, mock_run):
+        """Should raise when verification shows device is not read-only."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stderr=""),
+            MagicMock(returncode=0, stdout="0", stderr=""),  # not read-only
+        ]
+        with pytest.raises(DeadAcquisitionError, match="verification failed"):
+            _apply_local_write_blocker("/dev/sdb")
