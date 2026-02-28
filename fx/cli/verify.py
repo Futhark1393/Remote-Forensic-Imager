@@ -32,7 +32,7 @@ def _print_banner() -> None:
 
     info = [
         f"{C1}ForenXtract{C0}",
-        f"{C1}v3.2.0{C0}",
+        f"{C1}v3.3.0{C0}",
         f"{DIM}Audit Trail Verifier{C0}",
     ]
 

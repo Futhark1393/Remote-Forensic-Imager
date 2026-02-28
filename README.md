@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/Futhark1393/ForenXtract/actions/workflows/python-ci.yml/badge.svg)
 
-**Author:** Futhark1393 · **Version:** 3.2.0 · **License:** MIT
+**Author:** Futhark1393 · **Version:** 3.3.0 · **License:** MIT
 
 ForenXtract (FX) is a **case-first remote disk acquisition framework** built with **Python + PyQt6**. It enforces structured forensic workflows through an explicit session state machine, generates a cryptographically hash-chained audit trail (JSONL), and produces TXT/PDF forensic reports.
 
@@ -141,13 +141,13 @@ fx-acquire \
 
 # Interface Preview
 
-## v3.2.0 — LZ4 Compression Support
+## v3.3.0 — Bug Fixes & Security Hardening
 
-![ForenXtract v3.2.0 GUI](screenshots/main_ui_v320.png)
+![ForenXtract v3.3.0 GUI](screenshots/main_ui_v320.png)
 
 The GUI now mirrors all CLI capabilities across 6 structured sections:
 
-| # | Section | What's new in v3.2.0 |
+| # | Section | What's new in v3.3.0 |
 |---|---------|----------------------|
 | 1 | Case Identification | *(unchanged)* |
 | 2 | Remote Server (SSH) | *(unchanged)* |
@@ -186,9 +186,13 @@ Forensic workflow ordering enforced through an explicit state machine:
 
 ~~~text
 NEW → CONTEXT_BOUND → ACQUIRING → VERIFYING → SEALED → DONE
+                         ↑    ↓
+                         └ abort()
 ~~~
 
-Illegal transitions raise `SessionStateError` and halt operation.
+- Illegal transitions raise `SessionStateError` and halt operation.
+- `abort()` returns the session to `CONTEXT_BOUND` after stop/error, allowing retry without a full reset.
+- `reset()` (F5) returns the session to `NEW` for a completely fresh workflow.
 
 ## Tamper-Evident Audit Logging (JSONL)
 
@@ -204,6 +208,8 @@ Illegal transitions raise `SessionStateError` and halt operation.
 - On-the-fly dual hashing (MD5 + SHA-256)
 - Optional post-acquisition remote SHA-256 verification
 - Safe Mode (`conv=noerror,sync`), write-blocker, throttling
+- **Input validation** — disk paths are validated against injection patterns and shell-quoted (`shlex.quote`)
+- **Graceful stop** — SSH transport is force-closed to interrupt blocking reads immediately
 - Automatic retry on connection loss (up to 3 retries with resume)
 - Output formats: **RAW**, **RAW+LZ4** (compressed), **E01**, **AFF4** (optional)
 
@@ -321,7 +327,7 @@ Volatile evidence collected **before** acquisition. All operations are strictly 
 
 # Triage Data Dashboard
 
-**v3.2.0 — Interactive Triage Visualization**
+**v3.3.0 — Interactive Triage Visualization**
 
 If triage is enabled, ForenXtract automatically generates an **interactive HTML dashboard** with real-time visualizations:
 
@@ -388,7 +394,7 @@ fx/
 ├── core/                       # Business logic (Qt-free, headless-testable)
 │   ├── session.py              # Workflow state machine (NEW → DONE)
 │   ├── hashing.py              # StreamHasher (MD5 + SHA-256)
-│   ├── policy.py               # Write-blocker, dd command builder
+│   ├── policy.py              # Write-blocker, dd builder, input validation
 │   └── acquisition/
 │       ├── base.py             # AcquisitionEngine
 │       ├── raw.py / ewf.py / aff4.py / lz4_writer.py
@@ -415,7 +421,7 @@ fx/
 | `NetworkState_<CASE>_<UTC>.txt` / `.json` | Triage: network state |
 | `ProcessList_<CASE>_<UTC>.txt` / `.json` | Triage: process list |
 | `MemoryState_<CASE>_<UTC>.json` | Triage: memory metadata |
-| **`TriageDashboard_<CASE>_<UTC>.html`** | **NEW (v3.2.0)** — Interactive triage visualizations (open in browser) |
+| **`TriageDashboard_<CASE>_<UTC>.html`** | Interactive triage visualizations (open in browser) |
 
 ---
 
@@ -425,13 +431,13 @@ fx/
 python -m pytest tests/ -v
 ~~~
 
-**113 unit tests** across 3 test modules:
+**120 unit tests** across 3 test modules:
 
 | Module | Tests | Coverage |
 |--------|------:|----------|
-| `test_core.py` | 70 | Session state machine (incl. reset), StreamHasher, RawWriter, LZ4Writer, dd command builder, AuditChainVerifier, ForensicLogger (hash chain, sealing, context, syslog integration), Ed25519 signing, SyslogHandler (RFC 5424 + CEF), EwfWriter, AFF4Writer, DependencyChecker, ReportEngine (TXT/PDF + executive summary variants) |
-| `test_triage.py` | 22 | ProcessListCollector (ps parsing, artifact saving, SSH error handling), NetworkStateCollector (all commands, TXT/JSON output, error isolation), MemoryDumpCollector (meminfo, kallsyms, modules, LiME detection), TriageOrchestrator (all collectors, error isolation, directory creation, status callback) |
-| `test_acquisition.py` | 21 | `ssh_exec` (basic/error/unicode), `apply_write_blocker` (success/setro fail/getro fail), `verify_source_hash` (success/fail/exception), AcquisitionEngine (init, stop, progress callback, percentage cap, unavailable format handling via mock for E01/AFF4/LZ4, full RAW acquisition with mock SSH, connection failure + retry) |
+| `test_core.py` | 78 | Session state machine (incl. reset & abort), StreamHasher, RawWriter, LZ4Writer (incl. double-close guard), dd command builder, disk path injection validation, AuditChainVerifier, ForensicLogger (hash chain, sealing, context, syslog integration), Ed25519 signing, SyslogHandler (RFC 5424 + CEF), EwfWriter, AFF4Writer, DependencyChecker, ReportEngine (TXT/PDF + executive summary variants) |
+| `test_triage.py` | 23 | ProcessListCollector (ps parsing, artifact saving, SSH error handling), NetworkStateCollector (all commands, TXT/JSON output, error isolation), MemoryDumpCollector (meminfo, kallsyms, modules, LiME detection), TriageOrchestrator (all collectors, error isolation, directory creation, status callback) |
+| `test_acquisition.py` | 19 | `ssh_exec` (basic/error/unicode), `apply_write_blocker` (success/setro fail/getro fail), `verify_source_hash` (success/fail/exception), AcquisitionEngine (init, stop, progress callback, percentage cap, unavailable format handling via mock for E01/AFF4/LZ4, full RAW acquisition with mock SSH, connection failure + retry) |
 
 All optional-dependency tests (pyewf, pyaff4, lz4) use `unittest.mock.patch` to test both available and unavailable code paths regardless of installed packages — **zero skips**.
 

@@ -143,7 +143,7 @@ def main() -> int:
 
     info = [
         f"{C3}ForenXtract{C0}",
-        f"{C3}v3.2.0{C0}",
+        f"{C3}v3.3.0{C0}",
         f"{DIM}Remote Forensic Acquisition{C0}",
         "",
         f"{C3}Session{C0}   {DIM}{logger.session_id}{C0}",
