@@ -2,9 +2,9 @@
 
 ![CI](https://github.com/Futhark1393/ForenXtract/actions/workflows/python-ci.yml/badge.svg)
 
-**Author:** Futhark1393 · **Version:** 3.3.0 · **License:** Apache-2.0
+**Author:** Kemal Sebzeci · **Version:** 3.4.0 · **License:** Apache-2.0
 
-ForenXtract (FX) is a **case-first remote disk acquisition framework** built with **Python + PyQt6**. It enforces structured forensic workflows through an explicit session state machine, generates a cryptographically hash-chained audit trail (JSONL), and produces TXT/PDF forensic reports.
+ForenXtract (FX) is a **case-first forensic disk acquisition framework** built with **Python + PyQt6**. It supports both **Live (Remote/SSH)** and **Dead (Local)** acquisition through a tabbed interface. It enforces structured forensic workflows through an explicit session state machine, generates a cryptographically hash-chained audit trail (JSONL), and produces TXT/PDF forensic reports.
 
 ---
 
@@ -129,6 +129,8 @@ Once an acquisition completes, press **F5** to reset the session state machine a
 
 ## CLI Mode (Headless)
 
+### Live Acquisition (Remote)
+
 ~~~bash
 fx-acquire \
   --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
@@ -137,24 +139,37 @@ fx-acquire \
   --format RAW --verify --safe-mode
 ~~~
 
+### Dead Acquisition (Local)
+
+~~~bash
+fx-acquire --dead \
+  --source /dev/sdb --output-dir ./evidence \
+  --case 2026-001 --examiner "Investigator" \
+  --format E01 --verify --write-blocker
+~~~
+
 ---
 
 # Interface Preview
 
-## v3.3.0 — Bug Fixes & Security Hardening
+## v3.4.0 — Tabbed GUI + Dead Acquisition
 
-![ForenXtract v3.3.0 GUI](screenshots/main_ui_v320.png)
+![ForenXtract v3.4.0 GUI](screenshots/main_ui_v320.png)
 
-The GUI now mirrors all CLI capabilities across 6 structured sections:
+The GUI is now organized into a **QTabWidget** with two acquisition modes:
 
-| # | Section | What's new in v3.3.0 |
-|---|---------|----------------------|
-| 1 | Case Identification | *(unchanged)* |
-| 2 | Remote Server (SSH) | *(unchanged)* |
-| 3 | Evidence Target | *(unchanged)* |
-| 4 | Acquisition Options | **Format dropdown** (RAW / **RAW+LZ4** / E01 / AFF4) — **LZ4 compression** (~50% ratio, fast) |
-| 5 | Live Triage | **Granular checkboxes** — Network, Processes, Memory, Hash EXEs |
-| 6 | Advanced | **Signing key** picker + **SIEM/Syslog** fields (host, port, UDP/TCP, CEF) |
+| Tab | Description |
+|-----|-------------|
+| **Live Acquisition (Remote)** | SSH-based remote disk imaging — target IP, SSH key, remote disk selection, live triage |
+| **Dead Acquisition (Local)** | Local block-device / image-file imaging — auto-detect via lsblk, source image file picker |
+
+Shared sections below the tabs:
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | Case Identification | Case number + Examiner (shared across modes) |
+| 2 | Acquisition Options | **Format dropdown** (RAW / **RAW+LZ4** / E01 / AFF4), Safe Mode, Verify, Write-Blocker, Throttle |
+| 3 | Advanced | **Signing key** picker + **SIEM/Syslog** fields (host, port, UDP/TCP, CEF) |
 
 ### Workflow Screens
 
@@ -204,7 +219,8 @@ NEW → CONTEXT_BOUND → ACQUIRING → VERIFYING → SEALED → DONE
 
 ## Acquisition & Integrity
 
-- SSH-based acquisition (pure-Python, headless-testable)
+- SSH-based remote acquisition (pure-Python, headless-testable)
+- **Dead (local) acquisition** — direct block-device / image-file reading via Python I/O
 - On-the-fly dual hashing (MD5 + SHA-256)
 - Optional post-acquisition remote SHA-256 verification
 - Safe Mode (`conv=noerror,sync`), write-blocker, throttling
@@ -219,17 +235,30 @@ NEW → CONTEXT_BOUND → ACQUIRING → VERIFYING → SEALED → DONE
 
 ## `fx-acquire` — Headless Acquisition
 
-All parameters:
+### Mode Selection
 
 | Parameter | Description |
 |-----------|-------------|
-| `--ip`, `--user`, `--key` | SSH connection details (required) |
-| `--disk` | Target block device (required) |
+| *(default)* | **Live mode** — remote acquisition via SSH |
+| `--dead` | **Dead mode** — local block-device / image-file acquisition |
+| `--source PATH` | Source device or file for dead mode (e.g., `/dev/sdb`, `image.raw`) |
+
+### Live Mode Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `--ip`, `--user`, `--key` | SSH connection details (required for live) |
+| `--disk` | Target block device on remote host (required for live) |
+
+### Shared Parameters
+
+| Parameter | Description |
+|-----------|-------------|
 | `--output-dir` | Evidence output directory (required) |
 | `--case`, `--examiner` | Case metadata (required) |
 | `--format RAW\|RAW+LZ4\|E01\|AFF4` | Evidence format (default: RAW) |
-| `--verify` | Post-acquisition remote SHA-256 check |
-| `--safe-mode` | `conv=noerror,sync` (default: on) |
+| `--verify` | Post-acquisition SHA-256 verification |
+| `--safe-mode` | Pad unreadable sectors with zeros (default: on) |
 | `--write-blocker` | Software write-blocker |
 | `--throttle N` | Bandwidth limit in MB/s |
 | `--signing-key PATH` | Ed25519 key for audit trail signing |
@@ -253,7 +282,7 @@ All parameters:
 | `--siem-protocol UDP\|TCP` | Protocol (default: UDP) |
 | `--siem-cef` | CEF output instead of RFC 5424 |
 
-Example with triage + SIEM:
+Example — live acquisition with triage + SIEM:
 
 ~~~bash
 fx-acquire \
@@ -262,6 +291,15 @@ fx-acquire \
   --case 2026-001 --examiner "Investigator" \
   --triage --triage-memory \
   --siem-host 10.0.0.100 --siem-port 514 --siem-protocol TCP
+~~~
+
+Example — dead acquisition:
+
+~~~bash
+fx-acquire --dead \
+  --source /dev/sdb --output-dir ./evidence \
+  --case 2026-001 --examiner "Investigator" \
+  --format RAW+LZ4 --verify --write-blocker
 ~~~
 
 ## `fx-verify` — Audit Chain Verification
@@ -327,7 +365,7 @@ Volatile evidence collected **before** acquisition. All operations are strictly 
 
 # Triage Data Dashboard
 
-**v3.3.0 — Interactive Triage Visualization**
+**v3.4.0 — Interactive Triage Visualization**
 
 If triage is enabled, ForenXtract automatically generates an **interactive HTML dashboard** with real-time visualizations:
 
@@ -381,7 +419,7 @@ fx-acquire \
 ~~~text
 fx/
 ├── cli/                        # Headless CLI tools
-│   ├── acquire.py              # fx-acquire (no Qt dependency)
+│   ├── acquire.py              # fx-acquire (live + dead modes, no Qt)
 │   └── verify.py               # fx-verify (chain + sig verification)
 ├── triage/                     # Live triage collectors (read-only)
 │   ├── orchestrator.py
@@ -389,14 +427,15 @@ fx/
 │   ├── processes.py
 │   └── memory.py
 ├── ui/                         # Qt / GUI layer
-│   ├── gui.py
-│   └── workers.py
+│   ├── gui.py                  # Tabbed interface (Live + Dead tabs)
+│   └── workers.py              # AcquisitionWorker + DeadAcquisitionWorker
 ├── core/                       # Business logic (Qt-free, headless-testable)
 │   ├── session.py              # Workflow state machine (NEW → DONE)
 │   ├── hashing.py              # StreamHasher (MD5 + SHA-256)
 │   ├── policy.py              # Write-blocker, dd builder, input validation
 │   └── acquisition/
-│       ├── base.py             # AcquisitionEngine
+│       ├── base.py             # AcquisitionEngine (live/remote)
+│       ├── dead.py             # DeadAcquisitionEngine (local)
 │       ├── raw.py / ewf.py / aff4.py / lz4_writer.py
 │       └── verify.py
 ├── audit/                      # Tamper-evident logging + signing
@@ -431,13 +470,13 @@ fx/
 python -m pytest tests/ -v
 ~~~
 
-**120 unit tests** across 3 test modules:
+**132 unit tests** across 3 test modules:
 
 | Module | Tests | Coverage |
 |--------|------:|----------|
 | `test_core.py` | 78 | Session state machine (incl. reset & abort), StreamHasher, RawWriter, LZ4Writer (incl. double-close guard), dd command builder, disk path injection validation, AuditChainVerifier, ForensicLogger (hash chain, sealing, context, syslog integration), Ed25519 signing, SyslogHandler (RFC 5424 + CEF), EwfWriter, AFF4Writer, DependencyChecker, ReportEngine (TXT/PDF + executive summary variants) |
 | `test_triage.py` | 23 | ProcessListCollector (ps parsing, artifact saving, SSH error handling), NetworkStateCollector (all commands, TXT/JSON output, error isolation), MemoryDumpCollector (meminfo, kallsyms, modules, LiME detection), TriageOrchestrator (all collectors, error isolation, directory creation, status callback) |
-| `test_acquisition.py` | 19 | `ssh_exec` (basic/error/unicode), `apply_write_blocker` (success/setro fail/getro fail), `verify_source_hash` (success/fail/exception), AcquisitionEngine (init, stop, progress callback, percentage cap, unavailable format handling via mock for E01/AFF4/LZ4, full RAW acquisition with mock SSH, connection failure + retry) |
+| `test_acquisition.py` | 31 | `ssh_exec` (basic/error/unicode), `apply_write_blocker` (success/setro fail/getro fail), `verify_source_hash` (success/fail/exception), AcquisitionEngine (init, stop, progress callback, percentage cap, unavailable format handling via mock for E01/AFF4/LZ4, full RAW acquisition with mock SSH, connection failure + retry), **DeadAcquisitionEngine** (file imaging, hash verification, source-not-found, zero-size, stop/abort, LZ4 format, throttle), `_get_source_size` (regular/empty file), `_apply_local_write_blocker` (success/setro fail/verify fail) |
 
 All optional-dependency tests (pyewf, pyaff4, lz4) use `unittest.mock.patch` to test both available and unavailable code paths regardless of installed packages — **zero skips**.
 
@@ -447,6 +486,6 @@ All optional-dependency tests (pyewf, pyaff4, lz4) use `unittest.mock.patch` to 
 
 Apache License 2.0 — see [LICENSE](LICENSE)
 
-**Author:** Futhark1393
+**Author:** Kemal Sebzeci
 
 If ForenXtract has been helpful in your investigations, [consider buying me a coffee ☕](https://buymeacoffee.com/futhark) to support ongoing development!

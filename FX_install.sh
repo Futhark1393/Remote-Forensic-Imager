@@ -1,6 +1,6 @@
 #!/bin/bash
 # Author: Futhark1393
-# Description: Automated installer for ForenXtract (FX) v3.3.0
+# Description: Automated installer for ForenXtract (FX) v3.4.0
 # Installs system dependencies, compiles libewf (E01 optional),
 # creates a Python virtual environment, installs the package,
 # and symlinks fx / fx-acquire / fx-verify to /usr/local/bin.
@@ -59,7 +59,7 @@ echo ""
 echo -e "${C_CYAN}╔════════════════════════════════════╗${C_RESET}"
 echo -e "${C_CYAN}║ ███████╗  ██╗  ██╗                 ║${C_RESET}"
 echo -e "${C_CYAN}║ ██╔════╝  ╚██╗██╔╝   ForenXtract   ║${C_RESET}"
-echo -e "${C_CYAN}║ █████╗     ╚███╔╝    v3.3.0        ║${C_RESET}"
+echo -e "${C_CYAN}║ █████╗     ╚███╔╝    v3.4.0        ║${C_RESET}"
 echo -e "${C_CYAN}║ ██╔══╝     ██╔██╗    Installer     ║${C_RESET}"
 echo -e "${C_CYAN}║ ██║       ██╔╝ ██╗                 ║${C_RESET}"
 echo -e "${C_CYAN}║ ╚═╝       ╚═╝  ╚═╝                 ║${C_RESET}"
@@ -201,7 +201,7 @@ success "Desktop entry created."
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${C_GREEN}╔══════════════════════════════════════════════════╗${C_RESET}"
-echo -e "${C_GREEN}║   ForenXtract (FX) v3.3.0 — INSTALLED           ║${C_RESET}"
+echo -e "${C_GREEN}║   ForenXtract (FX) v3.4.0 — INSTALLED           ║${C_RESET}"
 echo -e "${C_GREEN}╚══════════════════════════════════════════════════╝${C_RESET}"
 echo ""
 echo -e "  ${C_CYAN}GUI mode:${C_RESET}        fx"

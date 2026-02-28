@@ -1,7 +1,7 @@
 # Author: Kemal Sebzeci
 # Description: Local (dead) forensic acquisition engine — no network dependency.
 # Features: Direct block-device / image-file reading, on-the-fly dual hashing,
-#           ETA, throttling, optional write-blocker, post-acquisition verification.
+# ETA, throttling, optional write-blocker, post-acquisition verification.
 
 import fcntl
 import os

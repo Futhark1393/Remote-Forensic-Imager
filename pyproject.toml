@@ -1,8 +1,8 @@
 [project]
 name = "forenxtract"
-version = "3.3.0"
-description = "ForenXtract (FX) — case-first remote forensic acquisition tool with structured audit logging and report generation"
-authors = [{ name = "Futhark1393" }]
+version = "3.4.0"
+description = "ForenXtract (FX) — case-first forensic acquisition tool (live & dead) with structured audit logging and report generation"
+authors = [{ name = "Kemal Sebzeci" }]
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"

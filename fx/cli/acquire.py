@@ -171,7 +171,7 @@ def main() -> int:
 
     info = [
         f"{C3}ForenXtract{C0}",
-        f"{C3}v3.3.0{C0}",
+        f"{C3}v3.4.0{C0}",
         f"{DIM}{'Dead (Local) Acquisition' if is_dead else 'Remote Forensic Acquisition'}{C0}",
         "",
         f"{C3}Session{C0}   {DIM}{logger.session_id}{C0}",
