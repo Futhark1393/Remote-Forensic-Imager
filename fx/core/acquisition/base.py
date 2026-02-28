@@ -3,6 +3,7 @@
 # Features: SSH streaming, on-the-fly hashing, ETA, throttling, resume-on-disconnect,
 #          live triage, optional write-blocker, and post-acquisition hash verification.
 
+import hashlib
 import os
 import socket
 import time
@@ -152,6 +153,57 @@ class AcquisitionEngine:
             "md5_current": md5,
             "percentage": min(100, pct),
             "eta": eta,
+        })
+
+    # ── Output image verification (FTK Imager-style) ────────────────────
+
+    def _verify_output(self, expected_sha256: str) -> tuple[str, bool | None]:
+        """Re-read the written output file and verify its SHA-256 matches.
+
+        This is the FTK Imager-style "verify after create" step: the image
+        on disk is read back and hashed independently to confirm it was
+        written correctly (no silent disk corruption, no truncation).
+
+        Returns ``(output_sha256, match_flag)``.
+        """
+        if not os.path.isfile(self.output_file):
+            return "ERROR", False
+        sha = hashlib.sha256()
+        try:
+            fsize = os.path.getsize(self.output_file)
+            verified = 0
+            start = time.time()
+            with open(self.output_file, "rb") as f:
+                while True:
+                    chunk = f.read(self.CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    sha.update(chunk)
+                    verified += len(chunk)
+                    self._emit_verify_progress(verified, fsize, start)
+            digest = sha.hexdigest()
+            return digest, (digest == expected_sha256)
+        except Exception:
+            return "ERROR", False
+
+    def _emit_verify_progress(self, verified_bytes: int, target_bytes: int, start_time: float) -> None:
+        """Emit a progress event during the output re-read verification phase."""
+        elapsed = time.time() - start_time
+        mb_per_sec = (verified_bytes / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+        pct = int((verified_bytes / target_bytes) * 100) if target_bytes > 0 else 0
+
+        eta_str = "Calculating..."
+        if mb_per_sec > 0:
+            remaining = max(0, target_bytes - verified_bytes)
+            eta_seconds = remaining / (mb_per_sec * 1024 * 1024)
+            eta_str = time.strftime("%H:%M:%S", time.gmtime(eta_seconds))
+
+        self.on_progress({
+            "bytes_read": verified_bytes,
+            "speed_mb_s": round(mb_per_sec, 2),
+            "md5_current": "",
+            "percentage": min(100, pct),
+            "eta": f"Verifying output image… {eta_str}",
         })
 
     # ── Triage ──────────────────────────────────────────────────────────
@@ -338,6 +390,14 @@ class AcquisitionEngine:
             if not success:
                 raise AcquisitionError("Acquisition did not complete successfully.")
 
+            # Output image re-verification (FTK "Verify After Create")
+            output_sha256 = "SKIPPED"
+            output_match = None
+            if self._is_running and self.format_type == "RAW":
+                self._emit(total_bytes, 0.0, hasher.md5_hex, 0,
+                           "Verifying output image (FTK-style)...")
+                output_sha256, output_match = self._verify_output(hasher.sha256_hex)
+
             return {
                 "sha256_final": hasher.sha256_hex,
                 "md5_final": hasher.md5_hex,
@@ -345,6 +405,8 @@ class AcquisitionEngine:
                 "remote_sha256": remote_sha256,
                 "hash_match": hash_match,
                 "triage_summary": self._triage_summary,
+                "output_sha256": output_sha256,
+                "output_match": output_match,
             }
 
         except AcquisitionError:

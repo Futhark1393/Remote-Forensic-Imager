@@ -944,6 +944,21 @@ class ForensicApp(QMainWindow):
             else:
                 self.log("Verification status unknown.", "WARNING", "INTEGRITY_UNKNOWN")
 
+        # ── Output image re-verification (FTK "Verify After Create") ─────
+        output_sha256 = data.get("output_sha256", "SKIPPED")
+        output_match = data.get("output_match", None)
+        if output_sha256 not in ("SKIPPED", None):
+            self.log(f"Output image SHA-256: {output_sha256}", "INFO", "OUTPUT_VERIFY",
+                     hash_context={"output_sha256": output_sha256, "output_match": output_match})
+            if output_match is True:
+                self.log("Output image verification: ✅ MATCH — written file matches stream hash.",
+                         "INFO", "OUTPUT_VERIFY_MATCH")
+            elif output_match is False:
+                self.log("Output image verification: ❌ MISMATCH — written file does NOT match stream hash!",
+                         "ERROR", "OUTPUT_VERIFY_MISMATCH")
+            else:
+                self.log("Output image verification: ⚠️  UNKNOWN", "WARNING", "OUTPUT_VERIFY_UNKNOWN")
+
         timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         
         # Create organized subdirectories
@@ -978,6 +993,8 @@ class ForensicApp(QMainWindow):
             "hash_match": hash_match,
             "audit_hash": audit_hash,
             "kernel_seal_success": chattr_success,
+            "output_sha256": output_sha256,
+            "output_match": output_match,
             "txt_path": txt_path,
             "pdf_path": pdf_path,
             "output_dir": self.output_dir,

@@ -338,6 +338,30 @@ def main() -> int:
         else:
             print("  Verification : ⚠️  UNKNOWN")
 
+    # ── Output image re-verification (FTK "Verify After Create") ─────
+    output_sha256 = result.get("output_sha256", "SKIPPED")
+    output_match = result.get("output_match")
+    if output_sha256 not in ("SKIPPED", None):
+        print(f"\n  Output SHA256: {output_sha256}")
+        if output_match is True:
+            print("  Output Verify: ✅ MATCH — written image matches stream hash")
+            logger.log("Output image re-verification MATCH.", "INFO", "OUTPUT_VERIFY_MATCH",
+                       source_module="cli", hash_context={
+                           "output_sha256": output_sha256,
+                           "stream_sha256": sha256,
+                           "output_match": True,
+                       })
+        elif output_match is False:
+            print("  Output Verify: ❌ MISMATCH — written image does NOT match stream hash!")
+            logger.log("Output image re-verification MISMATCH!", "ERROR", "OUTPUT_VERIFY_MISMATCH",
+                       source_module="cli", hash_context={
+                           "output_sha256": output_sha256,
+                           "stream_sha256": sha256,
+                           "output_match": False,
+                       })
+        else:
+            print("  Output Verify: ⚠️  UNKNOWN")
+
     # ── Seal ─────────────────────────────────────────────────────────
     try:
         session.seal()
@@ -374,6 +398,8 @@ def main() -> int:
         "hash_match": hash_match,
         "audit_hash": audit_hash,
         "kernel_seal_success": chattr_success,
+        "output_sha256": output_sha256,
+        "output_match": output_match,
         "txt_path": txt_path,
         "pdf_path": pdf_path,
     }

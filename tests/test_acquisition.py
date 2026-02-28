@@ -316,6 +316,12 @@ class TestAcquisitionEngine:
             assert len(result["md5_final"]) == 32
             assert os.path.exists(path)
 
+            # Output image verification (FTK-style) should be present for RAW
+            assert "output_sha256" in result
+            assert "output_match" in result
+            assert result["output_match"] is True
+            assert result["output_sha256"] == result["sha256_final"]
+
             # Verify written file matches
             with open(path, "rb") as f:
                 assert f.read() == evidence_data
@@ -343,6 +349,54 @@ class TestAcquisitionEngine:
             )
             with pytest.raises(AcquisitionError, match="Max retries"):
                 engine.run()
+
+    def test_engine_verify_output_match(self):
+        """_verify_output should return MATCH when file hash matches expected."""
+        import hashlib
+        data = os.urandom(16 * 1024)
+        expected = hashlib.sha256(data).hexdigest()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "test.raw")
+            with open(path, "wb") as f:
+                f.write(data)
+
+            engine = AcquisitionEngine(
+                ip="10.0.0.1", user="root", key_path="/tmp/key",
+                disk="/dev/sda", output_file=path, format_type="RAW",
+                case_no="TEST", examiner="Tester",
+            )
+            digest, match = engine._verify_output(expected)
+            assert match is True
+            assert digest == expected
+
+    def test_engine_verify_output_mismatch(self):
+        """_verify_output should return MISMATCH when hashes differ."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "test.raw")
+            with open(path, "wb") as f:
+                f.write(b"actual content")
+
+            engine = AcquisitionEngine(
+                ip="10.0.0.1", user="root", key_path="/tmp/key",
+                disk="/dev/sda", output_file=path, format_type="RAW",
+                case_no="TEST", examiner="Tester",
+            )
+            digest, match = engine._verify_output("0000000000000000000000000000000000000000000000000000000000000000")
+            assert match is False
+
+    def test_engine_verify_output_missing_file(self):
+        """_verify_output should return ERROR for missing file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "nonexistent.raw")
+            engine = AcquisitionEngine(
+                ip="10.0.0.1", user="root", key_path="/tmp/key",
+                disk="/dev/sda", output_file=path, format_type="RAW",
+                case_no="TEST", examiner="Tester",
+            )
+            digest, match = engine._verify_output("abc")
+            assert digest == "ERROR"
+            assert match is False
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -379,6 +433,10 @@ class TestDeadAcquisitionEngine:
             assert len(result["md5_final"]) == 32
             assert result["source_sha256"] == "SKIPPED"  # verify_hash=False
             assert result["hash_match"] is None
+
+            # Output re-verification (FTK-style) should be present for RAW
+            assert result["output_match"] is True
+            assert result["output_sha256"] == result["sha256_final"]
 
             with open(dst, "rb") as f:
                 assert f.read() == evidence_data
@@ -516,6 +574,54 @@ class TestDeadAcquisitionEngine:
             )
             result = engine.run()
             assert result["total_bytes"] == len(evidence_data)
+
+    def test_dead_output_verification_match(self):
+        """Output re-verification should MATCH for RAW format (FTK verify-after-create)."""
+        evidence_data = os.urandom(32 * 1024)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "source.img")
+            dst = os.path.join(tmpdir, "output.raw")
+            with open(src, "wb") as f:
+                f.write(evidence_data)
+
+            engine = DeadAcquisitionEngine(
+                source_path=src,
+                output_file=dst,
+                format_type="RAW",
+                case_no="DEAD-OV1",
+                examiner="Test",
+            )
+            result = engine.run()
+
+            assert result["output_sha256"] != "SKIPPED"
+            assert result["output_match"] is True
+            assert result["output_sha256"] == result["sha256_final"]
+
+    def test_dead_output_verification_skipped_for_non_raw(self):
+        """Output re-verification should be SKIPPED for non-RAW formats."""
+        evidence_data = os.urandom(8 * 1024)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "source.img")
+            dst = os.path.join(tmpdir, "output.raw.lz4")
+            with open(src, "wb") as f:
+                f.write(evidence_data)
+
+            try:
+                engine = DeadAcquisitionEngine(
+                    source_path=src,
+                    output_file=dst,
+                    format_type="RAW+LZ4",
+                    case_no="DEAD-OV2",
+                    examiner="Test",
+                )
+                result = engine.run()
+                # LZ4 format: output verification is skipped (container != raw bytes)
+                assert result["output_sha256"] == "SKIPPED"
+                assert result["output_match"] is None
+            except Exception:
+                pytest.skip("LZ4 not available")
 
 
 class TestGetSourceSize:
