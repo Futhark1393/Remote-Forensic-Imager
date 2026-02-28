@@ -58,8 +58,12 @@ class ForensicLogger:
             self.examiner = self.sanitize_filename(examiner)
             self.output_dir = output_dir
 
+            # Create audit subdirectory and place audit trail there
+            audit_dir = os.path.join(self.output_dir, "audit")
+            os.makedirs(audit_dir, exist_ok=True)
+            
             new_log_path = os.path.join(
-                self.output_dir, f"AuditTrail_{self.case_no}_{self.session_id}.jsonl"
+                audit_dir, f"AuditTrail_{self.case_no}_{self.session_id}.jsonl"
             )
 
             try:
@@ -192,6 +196,12 @@ class ForensicLogger:
                         print(f"WARNING: signing failed: {e}", file=sys.stderr)
 
                 # Attempt to make immutable (chattr), won't work without sudo passwordless (normal on forensic systems)
+                # First, always make read-only (chmod 444)
+                try:
+                    os.chmod(self.log_file_path, 0o444)
+                except OSError as e:
+                    print(f"WARNING: Failed to chmod audit trail: {e}", file=sys.stderr)
+
                 # Skip in test environments to allow tempfile cleanup
                 chattr_success = False
                 if "pytest" not in sys.modules:

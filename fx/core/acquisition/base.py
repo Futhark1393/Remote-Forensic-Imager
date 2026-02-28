@@ -79,6 +79,7 @@ class AcquisitionEngine:
         self.on_progress = on_progress or (lambda d: None)
 
         self._is_running = True
+        self._triage_summary = {}
 
     def stop(self) -> None:
         """Request a graceful stop of the acquisition loop."""
@@ -117,7 +118,9 @@ class AcquisitionEngine:
             on_status=_status,
         )
         try:
-            orchestrator.run(ssh, self.case_no, self.output_dir)
+            triage_summary = orchestrator.run(ssh, self.case_no, self.output_dir)
+            # Store triage results for later use (dashboard, etc.)
+            self._triage_summary = triage_summary
         except Exception:
             pass  # triage is best-effort — acquisition must not fail
 
@@ -293,6 +296,7 @@ class AcquisitionEngine:
                 "total_bytes": total_bytes,
                 "remote_sha256": remote_sha256,
                 "hash_match": hash_match,
+                "triage_summary": self._triage_summary,
             }
 
         except AcquisitionError:

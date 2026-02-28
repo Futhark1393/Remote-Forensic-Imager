@@ -1,11 +1,12 @@
 # Author: Futhark1393
 # Description: Main GUI module for ForenXtract (FX).
 # Features: Case Wizard workflow, structured forensic logging, secure acquisition orchestration,
-#          optional write-blocker, post-acq verification, report generation, triage, SIEM, signing.
+# Optional write-blocker, post-acq verification, report generation, triage, SIEM, signing.
 
 import sys
 import os
 import re
+import webbrowser
 import paramiko
 from datetime import datetime, timezone
 from importlib import resources
@@ -24,7 +25,8 @@ from PyQt6.QtWidgets import (
     QFormLayout,
 )
 from PyQt6.uic import loadUi
-from PyQt6.QtGui import QTextCursor
+from PyQt6.QtGui import QTextCursor, QKeySequence, QShortcut
+from PyQt6.QtCore import Qt
 
 from fx.deps.dependency_checker import run_dependency_check
 from fx.audit.logger import ForensicLogger, ForensicLoggerError
@@ -176,6 +178,7 @@ class ForensicApp(QMainWindow):
         self.start_time = None
         self.format_type = "RAW"
         self.target_filename = ""
+        self.dashboard_path = None
 
     # ── Setup ────────────────────────────────────────────────────────
 
@@ -190,6 +193,11 @@ class ForensicApp(QMainWindow):
         if hasattr(self, "btn_signing_key"):
             self.btn_signing_key.clicked.connect(self.select_signing_key)
 
+        # Open Dashboard button (if exists)
+        if hasattr(self, "btn_open_dashboard"):
+            self.btn_open_dashboard.clicked.connect(self.open_dashboard)
+            self.btn_open_dashboard.setEnabled(False)
+
         # Triage sub-options: enable/disable when chk_triage toggled
         if hasattr(self, "chk_triage"):
             self.chk_triage.toggled.connect(self._on_triage_toggled)
@@ -197,6 +205,10 @@ class ForensicApp(QMainWindow):
         # SIEM fields: enable/disable when chk_siem toggled
         if hasattr(self, "chk_siem"):
             self.chk_siem.toggled.connect(self._on_siem_toggled)
+
+        # F5 shortcut for session reset
+        self.f5_shortcut = QShortcut(QKeySequence("F5"), self)
+        self.f5_shortcut.activated.connect(self.reset_session)
 
     def setup_defaults(self):
         if hasattr(self, "txt_caseno"):
@@ -290,7 +302,28 @@ class ForensicApp(QMainWindow):
         if fname and hasattr(self, "txt_signing_key"):
             self.txt_signing_key.setText(fname)
 
+    def open_dashboard(self):
+        """Open the generated triage dashboard in the default web browser."""
+        if self.dashboard_path and os.path.exists(self.dashboard_path):
+            try:
+                webbrowser.open(f"file://{os.path.abspath(self.dashboard_path)}")
+                self._log_ui_only(f"[+] Opening dashboard: {self.dashboard_path}")
+            except Exception as e:
+                self._log_ui_only(f"[!] Failed to open dashboard: {e}")
+                QMessageBox.warning(self, "Error", f"Could not open dashboard:\n{e}")
+        else:
+            QMessageBox.warning(self, "Not Available", "Dashboard was not generated or file not found.")
+
     # ── Logging ───────────────────────────────────────────────────────
+
+    def _log_ui_only(self, msg: str) -> None:
+        """Log to UI only (no audit trail). Used after logger is sealed."""
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        ui_msg = f"[{timestamp}] {msg}"
+        self.txt_log.append(ui_msg)
+        cursor = self.txt_log.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.txt_log.setTextCursor(cursor)
 
     def log(self, msg, level="INFO", event_type="GENERAL", hash_context=None):
         try:
@@ -300,17 +333,60 @@ class ForensicApp(QMainWindow):
             cursor.movePosition(QTextCursor.MoveOperation.End)
             self.txt_log.setTextCursor(cursor)
         except ForensicLoggerError as e:
-            if self.worker and self.worker.isRunning():
-                self.worker.stop()
-            QMessageBox.critical(self, "Critical Audit Failure", f"Logging mechanism failed! Halting.\n\nDetails: {str(e)}")
+            # If logger is sealed, just log to UI without audit trail
+            if "mathematically sealed" in str(e).lower():
+                self._log_ui_only(f"[SEALED] {msg}")
+            else:
+                # Real failure - halt
+                if self.worker and self.worker.isRunning():
+                    self.worker.stop()
+                QMessageBox.critical(self, "Critical Audit Failure", f"Logging mechanism failed! Halting.\n\nDetails: {str(e)}")
 
     def export_console_to_folder(self):
         if self.output_dir:
             try:
-                with open(os.path.join(self.output_dir, f"AuditConsole_{self.case_no}.log"), "w", encoding="utf-8") as f:
+                audit_dir = os.path.join(self.output_dir, "audit")
+                os.makedirs(audit_dir, exist_ok=True)
+                with open(os.path.join(audit_dir, f"AuditConsole_{self.case_no}.log"), "w", encoding="utf-8") as f:
                     f.write(self.txt_log.toPlainText())
             except OSError:
                 pass
+
+    def reset_session(self):
+        """Reset session for new acquisition (F5 shortcut)."""
+        if self.worker and self.worker.isRunning():
+            QMessageBox.warning(self, "Cannot Reset", "Acquisition is in progress. Stop it first (Ctrl+C or Stop button).")
+            return
+
+        try:
+            # Reset session state machine
+            self.session.reset()
+            
+            # Create new logger with fresh session
+            self.logger = ForensicLogger()
+            self.logger.set_context(self.case_no, self.examiner, self.output_dir)
+            
+            # Re-bind context
+            self.session.bind_context(self.case_no, self.examiner, self.output_dir)
+            
+            # Reset UI state
+            self.progressBar.setValue(0)
+            self.btn_start.setEnabled(True)
+            self.btn_stop.setEnabled(False)
+            self.dashboard_path = None
+            
+            if hasattr(self, "btn_open_dashboard"):
+                self.btn_open_dashboard.setEnabled(False)
+            
+            # Clear and re-initialize log
+            self.txt_log.clear()
+            self.setup_terminal_style()
+            
+            self.log(f"[~] Session reset. Ready for new acquisition (F5)", "INFO", "SESSION_RESET")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Reset Error", f"Failed to reset session:\n{e}")
+            self._log_ui_only(f"[!] Session reset failed: {e}")
 
     # ── Validation ────────────────────────────────────────────────────
 
@@ -410,6 +486,28 @@ class ForensicApp(QMainWindow):
         write_blocker  = hasattr(self, "chk_writeblock") and self.chk_writeblock.isChecked()
         run_triage     = hasattr(self, "chk_triage")    and self.chk_triage.isChecked()
 
+        # ── Safe Mode + Verify incompatibility check ─────────────────
+        # Safe Mode zero-pads unreadable sectors, which changes the image hash.
+        # Source hash will never match if Safe Mode was used.
+        if safe_mode and verify_hash:
+            reply = QMessageBox.warning(
+                self, 
+                "Incompatible Options",
+                "Safe Mode (zero-padding unreadable sectors) is incompatible with hash verification.\n\n"
+                "The source disk hash will NOT match the local image hash if Safe Mode is enabled.\n\n"
+                "Options:\n"
+                "• Click OK to DISABLE verification (recommended with Safe Mode)\n" 
+                "• Click Cancel to disable Safe Mode and keep verification enabled",
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Ok
+            )
+            if reply == QMessageBox.StandardButton.Ok:
+                verify_hash = False
+                self.log("[*] Safe Mode detected: Verification disabled to avoid hash mismatch.", "WARNING", "ACQUISITION_PARAMS")
+            else:
+                self.log("[*] Disabling Safe Mode to enable verification.", "WARNING", "ACQUISITION_PARAMS")
+                safe_mode = False
+
         triage_network   = (not run_triage) or (hasattr(self, "chk_triage_network")   and self.chk_triage_network.isChecked())
         triage_processes = (not run_triage) or (hasattr(self, "chk_triage_processes") and self.chk_triage_processes.isChecked())
         triage_memory    = run_triage       and (hasattr(self, "chk_triage_memory")    and self.chk_triage_memory.isChecked())
@@ -461,7 +559,12 @@ class ForensicApp(QMainWindow):
         # ── Build output filename ─────────────────────────────────────
         timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         ext = _FORMAT_EXT.get(self.format_type, ".raw")
-        base_filename = os.path.join(self.output_dir, f"evidence_{self.case_no}_{timestamp_str}")
+        
+        # Create evidence subdirectory
+        evidence_dir = os.path.join(self.output_dir, "evidence")
+        os.makedirs(evidence_dir, exist_ok=True)
+        
+        base_filename = os.path.join(evidence_dir, f"evidence_{self.case_no}_{timestamp_str}")
         self.target_filename = base_filename + ext
         # EwfWriter takes base path without extension; AFF4Writer and RawWriter take full path
         # pyewf/libewf determine segment type from extension (.E01/.E02...).
@@ -573,8 +676,15 @@ class ForensicApp(QMainWindow):
                 self.log("Verification status unknown.", "WARNING", "INTEGRITY_UNKNOWN")
 
         timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        txt_path = os.path.join(self.output_dir, f"Report_{self.case_no}_{timestamp_str}.txt")
-        pdf_path = os.path.join(self.output_dir, f"Report_{self.case_no}_{timestamp_str}.pdf")
+        
+        # Create organized subdirectories
+        reports_dir = os.path.join(self.output_dir, "reports")
+        audit_dir = os.path.join(self.output_dir, "audit")
+        os.makedirs(reports_dir, exist_ok=True)
+        os.makedirs(audit_dir, exist_ok=True)
+        
+        txt_path = os.path.join(reports_dir, f"Report_{self.case_no}_{timestamp_str}.txt")
+        pdf_path = os.path.join(reports_dir, f"Report_{self.case_no}_{timestamp_str}.pdf")
 
         self.log("Generating reports (TXT & PDF)...", "INFO", "REPORT_START")
 
@@ -601,17 +711,58 @@ class ForensicApp(QMainWindow):
             "kernel_seal_success": chattr_success,
             "txt_path": txt_path,
             "pdf_path": pdf_path,
+            "output_dir": self.output_dir,
         }
 
+        # Extract triage JSON paths from triage_summary
+        triage_summary = data.get("triage_summary", {})
+        if triage_summary:
+            # Extract process JSON path
+            if "collectors" in triage_summary and "processes" in triage_summary["collectors"]:
+                processes_json = triage_summary["collectors"]["processes"].get("json_path")
+                if processes_json:
+                    report_data["processes_json_path"] = processes_json
+
+            # Extract network JSON path
+            if "collectors" in triage_summary and "network" in triage_summary["collectors"]:
+                network_json = triage_summary["collectors"]["network"].get("json_path")
+                if network_json:
+                    report_data["network_json_path"] = network_json
+
+            # Extract memory JSON path
+            if "collectors" in triage_summary and "memory" in triage_summary["collectors"]:
+                memory_json = triage_summary["collectors"]["memory"].get("json_path")
+                if memory_json:
+                    report_data["memory_json_path"] = memory_json
+
         ReportEngine.generate_reports(report_data)
+
+        # Store dashboard path for "Open Dashboard" button
+        self.dashboard_path = report_data.get("dashboard_path")
 
         try:
             self.session.finalize()
         except SessionStateError as e:
-            self.log(f"Session state warning: {e}", "WARNING", "SESSION_WARNING")
+            self._log_ui_only(f"[Session] Session state warning: {e}")
 
         self.export_console_to_folder()
-        QMessageBox.information(self, "Complete", "Forensic acquisition completed.\nReports saved.\n\nAudit trail is sealed.")
+
+        # Enable Open Dashboard button if dashboard was generated
+        if hasattr(self, "btn_open_dashboard") and self.dashboard_path:
+            self.btn_open_dashboard.setEnabled(True)
+        
+        # Show completion dialog with optional dashboard button
+        msg = "Forensic acquisition completed.\nReports saved.\n\nAudit trail is sealed."
+        if self.dashboard_path and os.path.exists(self.dashboard_path):
+            reply = QMessageBox.information(
+                self, "Complete", msg,
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Open,
+                QMessageBox.StandardButton.Ok
+            )
+            if reply == QMessageBox.StandardButton.Open:
+                self.open_dashboard()
+        else:
+            QMessageBox.information(self, "Complete", msg)
 
 
 def main() -> None:

@@ -52,7 +52,19 @@ class TriageOrchestrator:
         Run all enabled triage collectors.
 
         Returns a summary dict with per-collector results and any errors.
+        
+        Organizes output into triage/ subdirectory:
+            triage/data/      - JSON data files
+            triage/summaries/ - TXT summaries
         """
+        # Create organized subdirectories
+        triage_dir = os.path.join(output_dir, "triage")
+        triage_data_dir = os.path.join(triage_dir, "data")
+        triage_summary_dir = os.path.join(triage_dir, "summaries")
+        
+        os.makedirs(triage_data_dir, exist_ok=True)
+        os.makedirs(triage_summary_dir, exist_ok=True)
+        
         summary: dict = {
             "triage_timestamp_utc": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
             "case_no": case_no,
@@ -64,7 +76,16 @@ class TriageOrchestrator:
         if self.run_network:
             self._status("Triage: Collecting Network State...")
             try:
-                result = NetworkStateCollector().collect(ssh, case_no, output_dir)
+                result = NetworkStateCollector().collect(ssh, case_no, triage_summary_dir)
+                # Move JSON to data subdirectory
+                if result.get("json_path"):
+                    import shutil
+                    json_filename = os.path.basename(result["json_path"])
+                    data_json_path = os.path.join(triage_data_dir, json_filename)
+                    if os.path.exists(result["json_path"]):
+                        shutil.move(result["json_path"], data_json_path)
+                    result["json_path"] = data_json_path
+                
                 summary["collectors"]["network"] = {
                     "status": "OK",
                     "txt_path": result.get("txt_path"),
@@ -78,8 +99,17 @@ class TriageOrchestrator:
             self._status("Triage: Collecting Process List...")
             try:
                 result = ProcessListCollector().collect(
-                    ssh, case_no, output_dir, hash_exes=self.hash_exes
+                    ssh, case_no, triage_summary_dir, hash_exes=self.hash_exes
                 )
+                # Move JSON to data subdirectory
+                if result.get("json_path"):
+                    import shutil
+                    json_filename = os.path.basename(result["json_path"])
+                    data_json_path = os.path.join(triage_data_dir, json_filename)
+                    if os.path.exists(result["json_path"]):
+                        shutil.move(result["json_path"], data_json_path)
+                    result["json_path"] = data_json_path
+                
                 summary["collectors"]["processes"] = {
                     "status": "OK",
                     "process_count": result.get("process_count", 0),
@@ -94,7 +124,7 @@ class TriageOrchestrator:
             self._status("Triage: Collecting Memory State...")
             try:
                 result = MemoryDumpCollector().collect(
-                    ssh, case_no, output_dir, attempt_kcore=self.attempt_kcore
+                    ssh, case_no, triage_data_dir, attempt_kcore=self.attempt_kcore
                 )
                 summary["collectors"]["memory"] = {
                     "status": "OK",

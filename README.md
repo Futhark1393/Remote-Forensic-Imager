@@ -119,6 +119,14 @@ fx
 python main_qt6.py
 ~~~
 
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| **F5** | Reset session & start new acquisition (requires no acquisition running) |
+
+Once an acquisition completes, press **F5** to reset the session state machine and begin a new investigation without restarting the application.
+
 ## CLI Mode (Headless)
 
 ~~~bash
@@ -188,6 +196,7 @@ Illegal transitions raise `SessionStateError` and halt operation.
 - Forced disk flush (`fsync`) per record
 - Optional **Ed25519 digital signature** (detached `.sig` file)
 - **Optional SIEM/Syslog forwarding** (RFC 5424 UDP/TCP, CEF mode)
+- **File Protection** — audit trail sealed with `chmod 444` (read-only) + optional `chattr +i` (immutable on Linux ext4/XFS)
 
 ## Acquisition & Integrity
 
@@ -274,6 +283,19 @@ Exit codes: `0` = PASS · `2` = FAIL (tamper detected) · `1` = Error
 
 In all formats, evidence hash (MD5 + SHA-256) is computed on **raw disk data _before_ compression**. This ensures integrity of the original evidence, not the container format.
 
+> [!WARNING]
+> **Safe Mode ↔ Verification Incompatibility**
+>
+> If **Safe Mode** is enabled (`conv=noerror,sync`), unreadable disk sectors are padded with zeros during acquisition. This modifies the image data compared to the source disk.
+> 
+> Therefore, **source hash will NEVER match local image hash if Safe Mode is enabled**. 
+>
+> **Choose one:**
+> - ✅ **Safe Mode ON** + Verification OFF (unreadable sectors padded with zeros)
+> - ✅ **Safe Mode OFF** + Verification ON (unreadable sectors fail the acquisition)
+> 
+> Mixing both will always result in hash MISMATCH.
+
 ## Generate Signing Keypair
 
 ~~~bash
@@ -294,6 +316,57 @@ Volatile evidence collected **before** acquisition. All operations are strictly 
 
 > [!NOTE]
 > ForenXtract **never uploads kernel modules** to the target. LiME is only used if already loaded by an administrator before ForenXtract connects.
+
+---
+
+# Triage Data Dashboard
+
+**v3.2.0 — Interactive Triage Visualization**
+
+If triage is enabled, ForenXtract automatically generates an **interactive HTML dashboard** with real-time visualizations:
+
+## Features
+
+| Chart | Description |
+|-------|-------------|
+| **Top CPU Consumers** | Bar chart of processes using most CPU (%) |
+| **Top Memory Consumers** | Bar chart of processes using most RAM (%) |
+| **Process Distribution by User** | Pie chart showing process count per user |
+| **TTY Distribution** | Connection state distribution |
+| **Network Connection States** | Pie chart (ESTABLISHED, LISTEN, TIME_WAIT, etc.) |
+| **Protocol Distribution** | TCP vs UDP connections |
+| **Memory Usage Gauge** | Real-time RAM utilization with status indicators |
+| **Memory Breakdown** | Used vs Available memory (KB) |
+
+## Dashboard Output
+
+**File:** `TriageDashboard_<CASE>_<UTC>.html`
+
+Open in any web browser to explore:
+- ✅ Responsive design (mobile/tablet friendly)
+- ✅ Interactive Plotly charts (zoom, pan, hover tooltips)
+- ✅ Embedded statistics for each analysis
+- ✅ Grouped layout by triage module (Processes, Network, Memory)
+- ✅ Professional styling with case metadata
+
+## Example Usage
+
+```bash
+fx-acquire \
+  --ip 10.0.0.1 --user ubuntu --key ~/.ssh/key.pem \
+  --disk /dev/sda --output-dir ./evidence \
+  --case 2026-001 --examiner "Investigator" \
+  --triage --triage-memory \
+  --format RAW --verify
+```
+
+**Output artifacts:**
+- `evidence_2026_001_<UTC>.raw` — Disk image
+- `ProcessList_2026_001_<UTC>.json` — Process data (used for dashboard)
+- `NetworkState_2026_001_<UTC>.json` — Network data (used for dashboard)
+- `MemoryState_2026_001_<UTC>.json` — Memory data (used for dashboard)
+- **`TriageDashboard_2026_001_<UTC>.html`** ← Open this in browser! 📊
+- `Report_2026_001_<UTC>.pdf` — Audit report (includes dashboard reference)
 
 ---
 
@@ -338,10 +411,11 @@ fx/
 | `evidence_<CASE>_<UTC>.raw` / `.raw.lz4` / `.E01` / `.aff4` | Disk image (RAW, compressed, E01, or AFF4) |
 | `AuditTrail_<CASE>_<SESSION>.jsonl` | Tamper-evident audit log |
 | `AuditTrail_<CASE>_<SESSION>.jsonl.sig` | Ed25519 detached signature |
-| `Report_<CASE>_<UTC>.pdf` / `.txt` | Forensic report |
+| `Report_<CASE>_<UTC>.pdf` / `.txt` | Forensic report (includes dashboard reference) |
 | `NetworkState_<CASE>_<UTC>.txt` / `.json` | Triage: network state |
 | `ProcessList_<CASE>_<UTC>.txt` / `.json` | Triage: process list |
 | `MemoryState_<CASE>_<UTC>.json` | Triage: memory metadata |
+| **`TriageDashboard_<CASE>_<UTC>.html`** | **NEW (v3.2.0)** — Interactive triage visualizations (open in browser) |
 
 ---
 

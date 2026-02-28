@@ -84,3 +84,9 @@ class Session:
     def finalize(self) -> None:
         """SEALED → DONE"""
         self._transition(SessionState.DONE)
+    def reset(self) -> None:
+        """Reset session to NEW state for reuse (F5 / new acquisition)."""
+        self._state = SessionState.NEW
+        self.case_no = None
+        self.examiner = None
+        self.evidence_dir = None
