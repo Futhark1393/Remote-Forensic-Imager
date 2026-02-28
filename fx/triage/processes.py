@@ -49,11 +49,7 @@ class ProcessListCollector:
         if not pids:
             return processes
 
-        # Build a one-liner that tries each pid and outputs "pid:hash" or "pid:ERROR"
-        sub_cmds = " ".join(
-            f"sha256sum /proc/{pid}/exe 2>/dev/null && echo '__PID__{pid}' || echo '__PID__{pid} ERROR'"
-            for pid in pids
-        )
+        # Build a one-liner that tries each pid and outputs "pid:hash" or "pid:UNAVAILABLE"
         combined_cmd = f"for p in {' '.join(pids)}; do r=$(sha256sum /proc/$p/exe 2>/dev/null); if [ $? -eq 0 ]; then echo \"$p:$(echo $r | cut -d' ' -f1)\"; else echo \"$p:UNAVAILABLE\"; fi; done"
 
         try:

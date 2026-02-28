@@ -301,7 +301,17 @@ class AcquisitionEngine:
 
         except AcquisitionError:
             _safe_close_writer()
+            if ssh:
+                try:
+                    ssh.close()
+                except Exception:
+                    pass
             raise
         except Exception as e:
             _safe_close_writer()
+            if ssh:
+                try:
+                    ssh.close()
+                except Exception:
+                    pass
             raise AcquisitionError(f"Initialization Error: {e}")

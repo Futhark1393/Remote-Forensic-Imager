@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--examiner", required=True, help="Examiner name")
 
     # Optional — acquisition
-    p.add_argument("--format", choices=["RAW", "E01", "AFF4"], default="RAW", help="Evidence format (default: RAW)")
+    p.add_argument("--format", choices=["RAW", "RAW+LZ4", "E01", "AFF4"], default="RAW", help="Evidence format (default: RAW)")
     p.add_argument("--verify", action="store_true", help="Post-acquisition remote SHA-256 verification")
     p.add_argument("--safe-mode", action="store_true", default=True, help="Safe mode: conv=noerror,sync (default: on)")
     p.add_argument("--no-safe-mode", action="store_true", help="Disable safe mode")
@@ -173,7 +173,8 @@ def main() -> int:
     # ── Build output filename ────────────────────────────────────────
     timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     base_filename = os.path.join(output_dir, f"evidence_{case_no}_{timestamp_str}")
-    ext = ".E01" if args.format == "E01" else ".raw"
+    _CLI_FORMAT_EXT = {"RAW": ".raw", "RAW+LZ4": ".raw.lz4", "E01": ".E01", "AFF4": ".aff4"}
+    ext = _CLI_FORMAT_EXT.get(args.format, ".raw")
     target_filename = base_filename + ext
     # pyewf/libewf determine segment type from extension (.E01/.E02...).
     # Always pass a concrete first segment filename for E01.

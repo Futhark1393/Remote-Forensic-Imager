@@ -49,7 +49,11 @@ class LZ4Writer:
 
     def close(self) -> None:
         """Flush remaining data and close the file."""
-        # Flush any remaining buffered data
-        final = self._context.flush()
-        self._fh.write(final)
-        self._fh.close()
+        if getattr(self, '_closed', False):
+            return
+        self._closed = True
+        try:
+            final = self._context.flush()
+            self._fh.write(final)
+        finally:
+            self._fh.close()

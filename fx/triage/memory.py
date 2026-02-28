@@ -87,6 +87,7 @@ class MemoryDumpCollector:
         sha256 = hashlib.sha256()
         bytes_written = 0
 
+        sftp = None
         try:
             sftp = ssh.open_sftp()
             with sftp.open("/proc/kcore", "rb") as remote_f, open(dump_path, "wb") as local_f:
@@ -97,7 +98,6 @@ class MemoryDumpCollector:
                     local_f.write(chunk)
                     sha256.update(chunk)
                     bytes_written += len(chunk)
-            sftp.close()
             return {
                 "source":       "/proc/kcore",
                 "status":       "COLLECTED",
@@ -110,6 +110,12 @@ class MemoryDumpCollector:
             if os.path.exists(dump_path):
                 os.unlink(dump_path)
             return {"source": "/proc/kcore", "status": "ERROR", "error": str(e)}
+        finally:
+            if sftp is not None:
+                try:
+                    sftp.close()
+                except Exception:
+                    pass
 
     def _check_lime_device(self, ssh) -> dict:
         """Check if LiME device already exists (loaded by admin prior to ForenXtract)."""

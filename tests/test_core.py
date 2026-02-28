@@ -18,7 +18,7 @@ from fx.core.acquisition.raw import RawWriter
 from fx.core.acquisition.lz4_writer import LZ4Writer, LZ4_AVAILABLE
 from fx.core.acquisition.ewf import EwfWriter, EWF_AVAILABLE
 from fx.core.acquisition.aff4 import AFF4Writer, AFF4_AVAILABLE, AFF4NotAvailableError
-from fx.core.policy import build_dd_command
+from fx.core.policy import build_dd_command, _validate_disk_path
 from fx.audit.logger import ForensicLogger, ForensicLoggerError
 from fx.audit.verify import AuditChainVerifier
 from fx.audit.syslog_handler import SyslogHandler
@@ -320,6 +320,19 @@ class TestLZ4Writer:
         finally:
             os.unlink(path)
 
+    def test_lz4_double_close_safe(self):
+        """Double-close must not raise (idempotent guard)."""
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".raw.lz4") as tmp:
+            path = tmp.name
+        try:
+            w = LZ4Writer(path)
+            w.write(b"data")
+            w.close()
+            w.close()  # Second close must be a no-op
+            assert os.path.isfile(path)
+        finally:
+            os.unlink(path)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Policy / dd command tests
@@ -354,6 +367,22 @@ class TestPolicy:
         """dd should suppress its own progress output."""
         cmd = build_dd_command("/dev/sda", 0, safe_mode=True)
         assert "status=none" in cmd
+
+    def test_validate_disk_path_valid(self):
+        """Valid device paths should pass validation."""
+        for path in ["/dev/sda", "/dev/sda1", "/dev/nvme0n1", "/dev/mapper/vg0-root"]:
+            _validate_disk_path(path)  # Should not raise
+
+    def test_validate_disk_path_rejects_injection(self):
+        """Paths with shell metacharacters must be rejected."""
+        for bad in ["/dev/sda; rm -rf /", "/dev/sda && cat /etc/shadow", "$(whoami)", "/dev/sda|reboot"]:
+            with pytest.raises(ValueError, match="Invalid disk path"):
+                _validate_disk_path(bad)
+
+    def test_build_dd_rejects_bad_disk(self):
+        """build_dd_command must reject obviously malicious disk paths."""
+        with pytest.raises(ValueError, match="Invalid disk path"):
+            build_dd_command("/dev/sda; rm -rf /", 0, safe_mode=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════
