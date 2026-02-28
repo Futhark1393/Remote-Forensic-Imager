@@ -198,6 +198,12 @@ class ForensicApp(QMainWindow):
         if hasattr(self, "btn_dead_image"):
             self.btn_dead_image.clicked.connect(self.select_source_image)
 
+        # Mutual exclusion: device dropdown ↔ source file
+        if hasattr(self, "cmb_dead_disk"):
+            self.cmb_dead_disk.currentIndexChanged.connect(self._on_dead_device_selected)
+        if hasattr(self, "txt_dead_image"):
+            self.txt_dead_image.textChanged.connect(self._on_dead_image_changed)
+
         if hasattr(self, "btn_signing_key"):
             self.btn_signing_key.clicked.connect(self.select_signing_key)
 
@@ -313,12 +319,30 @@ class ForensicApp(QMainWindow):
     def select_source_image(self):
         """Open a file picker for dead-acquisition source image."""
         fname, _ = QFileDialog.getOpenFileName(
-            self, "Select Source Image",
+            self, "Select Source Image / File",
             "",
-            "Disk Images (*.raw *.img *.dd *.E01 *.aff4 *.raw.lz4);;All Files (*)",
+            "All Files (*);;Disk Images (*.raw *.img *.dd *.E01 *.aff4 *.raw.lz4)",
         )
         if fname and hasattr(self, "txt_dead_image"):
             self.txt_dead_image.setText(fname)
+
+    # ── Dead tab: mutual exclusion ────────────────────────────────────
+
+    def _on_dead_device_selected(self, index: int) -> None:
+        """When a device is chosen from the dropdown, clear the source file field."""
+        if index >= 0 and hasattr(self, "cmb_dead_disk"):
+            device_text = self.cmb_dead_disk.currentText().strip()
+            if device_text and hasattr(self, "txt_dead_image"):
+                self.txt_dead_image.blockSignals(True)
+                self.txt_dead_image.clear()
+                self.txt_dead_image.blockSignals(False)
+
+    def _on_dead_image_changed(self, text: str) -> None:
+        """When a source file path is entered, deselect the device dropdown."""
+        if text.strip() and hasattr(self, "cmb_dead_disk"):
+            self.cmb_dead_disk.blockSignals(True)
+            self.cmb_dead_disk.setCurrentIndex(-1)
+            self.cmb_dead_disk.blockSignals(False)
 
     def open_dashboard(self):
         """Open the generated triage dashboard in the default web browser."""

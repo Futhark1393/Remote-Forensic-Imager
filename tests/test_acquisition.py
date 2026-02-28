@@ -13,6 +13,7 @@ from fx.core.acquisition.dead import (
     DeadAcquisitionEngine,
     DeadAcquisitionError,
     _get_source_size,
+    _is_block_device,
     _apply_local_write_blocker,
 )
 from fx.core.acquisition.verify import verify_source_hash
@@ -548,7 +549,7 @@ class TestLocalWriteBlocker:
 
     @patch("fx.core.acquisition.dead.subprocess.run")
     def test_write_blocker_success(self, mock_run):
-        """Write blocker should succeed when both commands return 0."""
+        """Write blocker should succeed when both pkexec commands return 0."""
         mock_run.side_effect = [
             MagicMock(returncode=0, stderr=""),
             MagicMock(returncode=0, stdout="1", stderr=""),
@@ -556,6 +557,9 @@ class TestLocalWriteBlocker:
         # Should not raise
         _apply_local_write_blocker("/dev/sdb")
         assert mock_run.call_count == 2
+        # Verify pkexec is used (not sudo)
+        assert mock_run.call_args_list[0][0][0][0] == "pkexec"
+        assert mock_run.call_args_list[1][0][0][0] == "pkexec"
 
     @patch("fx.core.acquisition.dead.subprocess.run")
     def test_write_blocker_setro_failure(self, mock_run):
@@ -573,3 +577,113 @@ class TestLocalWriteBlocker:
         ]
         with pytest.raises(DeadAcquisitionError, match="verification failed"):
             _apply_local_write_blocker("/dev/sdb")
+
+
+class TestIsBlockDevice:
+    """Tests for _is_block_device helper."""
+
+    def test_regular_file_is_not_block(self):
+        """Regular files should not be classified as block devices."""
+        with tempfile.NamedTemporaryFile() as f:
+            assert _is_block_device(f.name) is False
+
+    def test_nonexistent_path(self):
+        """Non-existent path should return False (not raise)."""
+        assert _is_block_device("/nonexistent/path/xyz") is False
+
+    @patch("fx.core.acquisition.dead.os.stat")
+    def test_block_device_detected(self, mock_stat):
+        """Should return True for block-device st_mode."""
+        import stat as _stat
+        mock_stat.return_value = MagicMock(st_mode=_stat.S_IFBLK | 0o660)
+        assert _is_block_device("/dev/sdb") is True
+
+
+class TestGetSourceSizePkexecFallback:
+    """Tests for _get_source_size pkexec fallback on block devices."""
+
+    @patch("fx.core.acquisition.dead.subprocess.run")
+    @patch("fx.core.acquisition.dead.os.stat")
+    def test_pkexec_fallback_on_permission_error(self, mock_stat, mock_run):
+        """When direct ioctl fails, should use pkexec blockdev --getsize64."""
+        import stat as _stat
+        mock_stat.return_value = MagicMock(st_mode=_stat.S_IFBLK | 0o660)
+
+        # Mock open() to raise PermissionError for BLKGETSIZE64 ioctl path
+        with patch("builtins.open", side_effect=PermissionError("Permission denied")):
+            mock_run.return_value = MagicMock(returncode=0, stdout="16106127360\n")
+            size = _get_source_size("/dev/sdb")
+
+        assert size == 16106127360
+        mock_run.assert_called_once_with(
+            ["pkexec", "blockdev", "--getsize64", "/dev/sdb"],
+            capture_output=True, text=True,
+        )
+
+    @patch("fx.core.acquisition.dead.subprocess.run")
+    @patch("fx.core.acquisition.dead.os.stat")
+    def test_pkexec_fallback_cancelled(self, mock_stat, mock_run):
+        """When pkexec is cancelled by user, should raise PermissionError."""
+        import stat as _stat
+        mock_stat.return_value = MagicMock(st_mode=_stat.S_IFBLK | 0o660)
+
+        with patch("builtins.open", side_effect=PermissionError("Permission denied")):
+            mock_run.return_value = MagicMock(returncode=126, stdout="")
+            with pytest.raises(PermissionError, match="pkexec"):
+                _get_source_size("/dev/sdb")
+
+
+class TestOpenSourceElevated:
+    """Tests for DeadAcquisitionEngine._open_source with pkexec fallback."""
+
+    def test_direct_open_for_regular_file(self):
+        """Regular files should open directly without elevation."""
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"data")
+            f.flush()
+            path = f.name
+
+        try:
+            engine = DeadAcquisitionEngine(
+                source_path=path, output_file="/dev/null",
+                format_type="RAW", case_no="T", examiner="T",
+            )
+            src = engine._open_source()
+            assert src.read() == b"data"
+            engine._close_source(src)
+        finally:
+            os.unlink(path)
+
+    @patch("fx.core.acquisition.dead._is_block_device", return_value=True)
+    @patch("fx.core.acquisition.dead.subprocess.Popen")
+    def test_elevated_open_on_permission_error(self, mock_popen, mock_is_blk):
+        """Block device PermissionError should spawn pkexec dd."""
+        mock_proc = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_popen.return_value = mock_proc
+
+        engine = DeadAcquisitionEngine(
+            source_path="/dev/sdb", output_file="/dev/null",
+            format_type="RAW", case_no="T", examiner="T",
+        )
+        with patch("builtins.open", side_effect=PermissionError("denied")):
+            result = engine._open_source()
+
+        assert result is mock_proc.stdout
+        assert engine._elevated_proc is mock_proc
+        # Verify pkexec dd command
+        cmd = mock_popen.call_args[0][0]
+        assert cmd[0] == "pkexec"
+        assert cmd[1] == "dd"
+        assert f"if=/dev/sdb" in cmd[2]
+
+    @patch("fx.core.acquisition.dead._is_block_device", return_value=False)
+    def test_permission_error_non_block_reraises(self, mock_is_blk):
+        """PermissionError on non-block file should re-raise (no pkexec)."""
+        engine = DeadAcquisitionEngine(
+            source_path="/root/secret.img", output_file="/dev/null",
+            format_type="RAW", case_no="T", examiner="T",
+        )
+        with patch("builtins.open", side_effect=PermissionError("denied")):
+            with pytest.raises(PermissionError):
+                engine._open_source()

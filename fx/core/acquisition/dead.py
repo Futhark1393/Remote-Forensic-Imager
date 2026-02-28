@@ -26,21 +26,50 @@ class DeadAcquisitionError(Exception):
 _BLKGETSIZE64 = 0x80081272
 
 
-def _get_source_size(path: str) -> int:
-    """Return the byte-size of a block device or regular file."""
-    mode = os.stat(path).st_mode
+def _is_block_device(path: str) -> bool:
+    """Return True if *path* is a block device."""
     import stat as _stat
+    try:
+        return _stat.S_ISBLK(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
+def _get_source_size(path: str) -> int:
+    """Return the byte-size of a block device or regular file.
+
+    For block devices the function first tries a direct ioctl; if that
+    fails with PermissionError it falls back to ``pkexec blockdev --getsize64``.
+    """
+    import stat as _stat
+    mode = os.stat(path).st_mode
     if _stat.S_ISBLK(mode):
-        with open(path, "rb") as f:
-            buf = fcntl.ioctl(f.fileno(), _BLKGETSIZE64, b"\x00" * 8)
-            return struct.unpack("Q", buf)[0]
+        # Try direct ioctl first (works when running as root)
+        try:
+            with open(path, "rb") as f:
+                buf = fcntl.ioctl(f.fileno(), _BLKGETSIZE64, b"\x00" * 8)
+                return struct.unpack("Q", buf)[0]
+        except PermissionError:
+            pass
+
+        # Fallback: pkexec elevated blockdev
+        result = subprocess.run(
+            ["pkexec", "blockdev", "--getsize64", path],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            return int(result.stdout.strip())
+        raise PermissionError(
+            f"Cannot read device size for {path}. "
+            "pkexec authentication was cancelled or failed."
+        )
     return os.path.getsize(path)
 
 
 def _apply_local_write_blocker(disk: str) -> None:
-    """Set the local block device read-only via blockdev --setro."""
+    """Set the local block device read-only via ``pkexec blockdev --setro``."""
     result = subprocess.run(
-        ["sudo", "-n", "blockdev", "--setro", disk],
+        ["pkexec", "blockdev", "--setro", disk],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
@@ -49,7 +78,7 @@ def _apply_local_write_blocker(disk: str) -> None:
         )
     # Verify
     result = subprocess.run(
-        ["sudo", "-n", "blockdev", "--getro", disk],
+        ["pkexec", "blockdev", "--getro", disk],
         capture_output=True, text=True,
     )
     if result.returncode != 0 or result.stdout.strip() != "1":
@@ -93,10 +122,17 @@ class DeadAcquisitionEngine:
         self.on_progress = on_progress or (lambda d: None)
 
         self._is_running = True
+        self._elevated_proc: subprocess.Popen | None = None
 
     def stop(self) -> None:
         """Request a graceful stop of the acquisition loop."""
         self._is_running = False
+        # Kill elevated subprocess if one is running
+        if self._elevated_proc is not None:
+            try:
+                self._elevated_proc.terminate()
+            except Exception:
+                pass
 
     @property
     def is_running(self) -> bool:
@@ -147,7 +183,8 @@ class DeadAcquisitionEngine:
         import hashlib
         sha = hashlib.sha256()
         try:
-            with open(self.source_path, "rb") as src:
+            src = self._open_source()
+            try:
                 remaining = target_bytes
                 while remaining > 0 and self._is_running:
                     to_read = min(self.CHUNK_SIZE, remaining)
@@ -156,9 +193,44 @@ class DeadAcquisitionEngine:
                         break
                     sha.update(chunk)
                     remaining -= len(chunk)
+            finally:
+                self._close_source(src)
             return sha.hexdigest()
         except Exception:
             return "ERROR"
+
+    # ── Source I/O helpers (direct or pkexec-elevated) ───────────────
+
+    def _open_source(self):
+        """Open source for reading.  Returns a file-like object.
+
+        For block devices, if direct open fails with PermissionError the
+        method spawns ``pkexec dd`` and returns the process stdout pipe.
+        """
+        try:
+            return open(self.source_path, "rb")
+        except PermissionError:
+            if not _is_block_device(self.source_path):
+                raise
+            # Elevated read via pkexec dd (single polkit prompt)
+            cmd = [
+                "pkexec", "dd",
+                f"if={self.source_path}",
+                f"bs={self.CHUNK_SIZE}",
+                "status=none",
+            ]
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Stash process so we can terminate on stop / close
+            self._elevated_proc = proc
+            return proc.stdout
+
+    @staticmethod
+    def _close_source(src) -> None:
+        """Close the file-like returned by ``_open_source``."""
+        try:
+            src.close()
+        except Exception:
+            pass
 
     # ── Main loop ───────────────────────────────────────────────────
 
@@ -201,7 +273,8 @@ class DeadAcquisitionEngine:
                 pass
 
         try:
-            with open(self.source_path, "rb") as src:
+            src = self._open_source()
+            try:
                 while self._is_running:
                     chunk_start = time.time()
 
@@ -241,6 +314,15 @@ class DeadAcquisitionEngine:
                         eta_str = time.strftime("%H:%M:%S", time.gmtime(eta_seconds))
 
                     self._emit(total_bytes, mb_per_sec, hasher.md5_hex, pct, eta_str)
+            finally:
+                self._close_source(src)
+                # Clean up elevated process
+                if self._elevated_proc is not None:
+                    try:
+                        self._elevated_proc.wait(timeout=5)
+                    except Exception:
+                        self._elevated_proc.kill()
+                    self._elevated_proc = None
 
             # Finalize writer
             try:
