@@ -194,9 +194,14 @@ class DeadAcquisitionEngine:
     # ── Post-acquisition verification ───────────────────────────────
 
     def _verify_source(self, target_bytes: int) -> str:
-        """Re-read source and compute SHA-256 for verification."""
+        """Re-read source and compute SHA-256 for verification.
+
+        Emits progress events so the UI can display verification speed/ETA.
+        """
         import hashlib
         sha = hashlib.sha256()
+        verified_bytes = 0
+        start_time = time.time()
         try:
             src = self._open_source()
             try:
@@ -207,6 +212,8 @@ class DeadAcquisitionEngine:
                         if not chunk:
                             break
                         sha.update(chunk)
+                        verified_bytes += len(chunk)
+                        self._emit_verify_progress(verified_bytes, target_bytes, start_time)
                 else:
                     remaining = target_bytes
                     while remaining > 0 and self._is_running:
@@ -216,6 +223,8 @@ class DeadAcquisitionEngine:
                             break
                         sha.update(chunk)
                         remaining -= len(chunk)
+                        verified_bytes += len(chunk)
+                        self._emit_verify_progress(verified_bytes, target_bytes, start_time)
             finally:
                 self._close_source(src)
                 # Clean up elevated / tar subprocess
@@ -228,6 +237,26 @@ class DeadAcquisitionEngine:
             return sha.hexdigest()
         except Exception:
             return "ERROR"
+
+    def _emit_verify_progress(self, verified_bytes: int, target_bytes: int, start_time: float) -> None:
+        """Emit a progress event during the verification re-read phase."""
+        elapsed = time.time() - start_time
+        mb_per_sec = (verified_bytes / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+        pct = int((verified_bytes / target_bytes) * 100) if target_bytes > 0 else 0
+
+        eta_str = "Calculating..."
+        if mb_per_sec > 0:
+            remaining = max(0, target_bytes - verified_bytes)
+            eta_seconds = remaining / (mb_per_sec * 1024 * 1024)
+            eta_str = time.strftime("%H:%M:%S", time.gmtime(eta_seconds))
+
+        self.on_progress({
+            "bytes_read": verified_bytes,
+            "speed_mb_s": round(mb_per_sec, 2),
+            "md5_current": "",
+            "percentage": min(100, pct),
+            "eta": f"Verifying… {eta_str}",
+        })
 
     # ── Source I/O helpers (direct or pkexec-elevated) ───────────────
 
@@ -387,8 +416,8 @@ class DeadAcquisitionEngine:
             hash_match = None
 
             if self.verify_hash:
-                self._emit(total_bytes, 0.0, hasher.md5_hex, 100,
-                           "Verifying Source Hash (re-reading device)...")
+                # Reset progress to 0% — verification re-reads the full source
+                self._emit_verify_progress(0, target_bytes, time.time())
                 source_sha256 = self._verify_source(target_bytes)
                 if source_sha256 not in ("ERROR",):
                     hash_match = (source_sha256 == hasher.sha256_hex)

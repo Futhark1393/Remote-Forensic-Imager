@@ -874,10 +874,22 @@ class ForensicApp(QMainWindow):
             self.export_console_to_folder()
 
     def update_progress_ui(self, data):
-        self.progressBar.setValue(data.get("percentage", 0))
-        self.statusBar().showMessage(
-            f"Streaming... | Speed: {data.get('speed_mb_s', 0)} MB/s | ETA: {data.get('eta', '')} | MD5: {data.get('md5_current', '')}"
-        )
+        pct = data.get("percentage", 0)
+        speed = data.get("speed_mb_s", 0)
+        eta = data.get("eta", "")
+        md5 = data.get("md5_current", "")
+
+        self.progressBar.setValue(pct)
+
+        # During verification phase the ETA field starts with "Verifying…"
+        if isinstance(eta, str) and eta.startswith("Verifying"):
+            self.statusBar().showMessage(
+                f"Verifying Source Hash… | Speed: {speed} MB/s | {eta} | {pct}%"
+            )
+        else:
+            self.statusBar().showMessage(
+                f"Streaming... | Speed: {speed} MB/s | ETA: {eta} | MD5: {md5}"
+            )
 
     def on_acquisition_error(self, error_msg):
         self.log(f"Process Error: {error_msg}", "ERROR", "ACQUISITION_FAILED")
