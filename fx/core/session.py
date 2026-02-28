@@ -23,7 +23,7 @@ class SessionStateError(Exception):
 _TRANSITIONS: dict[SessionState, set[SessionState]] = {
     SessionState.NEW: {SessionState.CONTEXT_BOUND},
     SessionState.CONTEXT_BOUND: {SessionState.ACQUIRING},
-    SessionState.ACQUIRING: {SessionState.VERIFYING, SessionState.SEALED},
+    SessionState.ACQUIRING: {SessionState.VERIFYING, SessionState.SEALED, SessionState.CONTEXT_BOUND},
     SessionState.VERIFYING: {SessionState.SEALED},
     SessionState.SEALED: {SessionState.DONE},
     SessionState.DONE: set(),
@@ -84,6 +84,11 @@ class Session:
     def finalize(self) -> None:
         """SEALED → DONE"""
         self._transition(SessionState.DONE)
+
+    def abort(self) -> None:
+        """ACQUIRING → CONTEXT_BOUND (allows retry after stop/error)."""
+        self._transition(SessionState.CONTEXT_BOUND)
+
     def reset(self) -> None:
         """Reset session to NEW state for reuse (F5 / new acquisition)."""
         self._state = SessionState.NEW

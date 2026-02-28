@@ -4,6 +4,7 @@
 #          live triage, optional write-blocker, and post-acquisition hash verification.
 
 import os
+import socket
 import time
 from typing import Callable
 
@@ -80,10 +81,19 @@ class AcquisitionEngine:
 
         self._is_running = True
         self._triage_summary = {}
+        self._active_ssh = None
 
     def stop(self) -> None:
         """Request a graceful stop of the acquisition loop."""
         self._is_running = False
+        # Force-close the SSH transport so blocking reads are interrupted
+        if hasattr(self, '_active_ssh') and self._active_ssh:
+            try:
+                transport = self._active_ssh.get_transport()
+                if transport:
+                    transport.close()
+            except Exception:
+                pass
 
     @property
     def is_running(self) -> bool:
@@ -180,6 +190,7 @@ class AcquisitionEngine:
             while self._is_running and retries <= self.MAX_RETRIES:
                 ssh = paramiko.SSHClient()
                 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                self._active_ssh = ssh
 
                 try:
                     if retries > 0:
@@ -207,9 +218,19 @@ class AcquisitionEngine:
                     command = build_dd_command(self.disk, total_bytes, self.safe_mode)
                     stdin_ch, stdout_ch, stderr_ch = ssh.exec_command(command)
 
+                    # Set read timeout so stop() can interrupt blocking reads
+                    stdout_ch.channel.settimeout(2.0)
+
                     while self._is_running:
                         chunk_start = time.time()
-                        chunk = stdout_ch.read(self.CHUNK_SIZE)
+                        try:
+                            chunk = stdout_ch.read(self.CHUNK_SIZE)
+                        except socket.timeout:
+                            continue  # Re-check _is_running
+                        except OSError:
+                            if not self._is_running:
+                                break  # Transport closed by stop()
+                            raise
                         if not chunk:
                             success = True
                             break
@@ -258,6 +279,7 @@ class AcquisitionEngine:
                             f"Network/acquisition failure. Max retries exceeded: {e}"
                         )
                 finally:
+                    self._active_ssh = None
                     if ssh and not (success and self.verify_hash):
                         ssh.close()
 

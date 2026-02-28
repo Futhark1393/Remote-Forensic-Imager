@@ -123,7 +123,33 @@ class TestSession:
         s.begin_verification()
         s.seal()
         s.finalize()
-        assert s.state == SessionState.DONE
+
+    def test_abort_from_acquiring(self):
+        """abort() should transition ACQUIRING → CONTEXT_BOUND."""
+        s = Session()
+        s.bind_context("C", "E", "/tmp")
+        s.begin_acquisition()
+        s.abort()
+        assert s.state == SessionState.CONTEXT_BOUND
+
+    def test_abort_allows_retry(self):
+        """After abort(), user can start a new acquisition without reset."""
+        s = Session()
+        s.bind_context("C", "E", "/tmp")
+        s.begin_acquisition()
+        s.abort()
+        # Retry should work
+        s.begin_acquisition()
+        assert s.state == SessionState.ACQUIRING
+
+    def test_abort_from_wrong_state_raises(self):
+        """abort() from CONTEXT_BOUND should raise."""
+        s = Session()
+        s.bind_context("C", "E", "/tmp")
+        with pytest.raises(SessionStateError):
+            s.abort()
+        # State unchanged after failed transition
+        assert s.state == SessionState.CONTEXT_BOUND
 
     def test_reset_from_acquiring(self):
         """reset() should work from any state, not just DONE."""

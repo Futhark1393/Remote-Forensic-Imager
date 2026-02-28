@@ -490,23 +490,30 @@ class ForensicApp(QMainWindow):
         # Safe Mode zero-pads unreadable sectors, which changes the image hash.
         # Source hash will never match if Safe Mode was used.
         if safe_mode and verify_hash:
-            reply = QMessageBox.warning(
+            reply = QMessageBox.question(
                 self, 
                 "Incompatible Options",
                 "Safe Mode (zero-padding unreadable sectors) is incompatible with hash verification.\n\n"
                 "The source disk hash will NOT match the local image hash if Safe Mode is enabled.\n\n"
-                "Options:\n"
-                "• Click OK to DISABLE verification (recommended with Safe Mode)\n" 
-                "• Click Cancel to disable Safe Mode and keep verification enabled",
-                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
-                QMessageBox.StandardButton.Ok
+                "• Yes → Disable verification (recommended with Safe Mode)\n"
+                "• No → Disable Safe Mode and keep verification\n"
+                "• Cancel → Abort and go back to settings",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Yes
             )
-            if reply == QMessageBox.StandardButton.Ok:
+            if reply == QMessageBox.StandardButton.Yes:
                 verify_hash = False
                 self.log("[*] Safe Mode detected: Verification disabled to avoid hash mismatch.", "WARNING", "ACQUISITION_PARAMS")
-            else:
-                self.log("[*] Disabling Safe Mode to enable verification.", "WARNING", "ACQUISITION_PARAMS")
+            elif reply == QMessageBox.StandardButton.No:
                 safe_mode = False
+                self.log("[*] Disabling Safe Mode to enable verification.", "WARNING", "ACQUISITION_PARAMS")
+            else:
+                # User chose Cancel — abort, revert session state
+                try:
+                    self.session.abort()
+                except SessionStateError:
+                    pass
+                return
 
         triage_network   = (not run_triage) or (hasattr(self, "chk_triage_network")   and self.chk_triage_network.isChecked())
         triage_processes = (not run_triage) or (hasattr(self, "chk_triage_processes") and self.chk_triage_processes.isChecked())
@@ -637,6 +644,11 @@ class ForensicApp(QMainWindow):
         self.progressBar.setValue(0)
         self.statusBar().showMessage("Acquisition Interrupted.")
         self.export_console_to_folder()
+        # Reset session so user can retry without F5
+        try:
+            self.session.abort()
+        except SessionStateError:
+            pass
 
     def on_acquisition_finished(self, data):
         self.progressBar.setValue(100)
