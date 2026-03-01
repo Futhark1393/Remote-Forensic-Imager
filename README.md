@@ -2,9 +2,20 @@
 
 ![CI](https://github.com/Futhark1393/ForenXtract/actions/workflows/python-ci.yml/badge.svg)
 
-**Author:** Kemal Sebzeci · **Version:** 3.5.0 · **License:** Apache-2.0
+**Author:** Kemal Sebzeci · **Version:** 3.6.0 · **License:** Apache-2.0
 
 ForenXtract (FX) is a **case-first forensic disk acquisition framework** built with **Python + PyQt6**. It supports both **Live (Remote/SSH)** and **Dead (Local)** acquisition through a tabbed interface. It enforces structured forensic workflows through an explicit session state machine, generates a cryptographically hash-chained audit trail (JSONL), and produces TXT/PDF forensic reports.
+
+---
+
+## Changelog — v3.6.0
+
+### New Features
+| # | Feature | Module |
+|---|---------|--------|
+| 19 | **E01 metadata embedding (end-to-end)** — Case number, examiner name, description, and notes written into the E01 header. Visible in EnCase, Autopsy, FTK Imager. Configurable via GUI fields + CLI `--description` / `--notes`. | `ewf.py`, `base.py`, `dead.py`, `workers.py`, `acquire.py`, `gui.py` |
+| 20 | **Scrollable left panel** — UI rebuilt from scratch with `QScrollArea`, consistent spacing, and fixed-width labels. No more squished fields on smaller screens. | `forensic_qt6.ui` |
+| 21 | **E01 metadata group box** — GUI shows Description + Notes fields when E01 format is selected; auto-disabled for other formats. | `forensic_qt6.ui`, `gui.py` |
 
 ---
 
@@ -170,7 +181,9 @@ fx-acquire \
 fx-acquire --dead \
   --source /dev/sdb --output-dir ./evidence \
   --case 2026-001 --examiner "Investigator" \
-  --format E01 --verify --write-blocker
+  --format E01 --verify --write-blocker \
+  --description "Suspect laptop HDD - Dell Latitude" \
+  --notes "Seized under warrant #12345"
 ~~~
 
 For **directory (logical) acquisition**, the source folder is archived via deterministic `tar` and streamed directly to the forensic image:
@@ -202,8 +215,10 @@ Shared sections below the tabs:
 | # | Section | Description |
 |---|---------|-------------|
 | 1 | Case Identification | Case number + Examiner (shared across modes) |
-| 2 | Acquisition Options | **Format dropdown** (RAW / **RAW+LZ4** / E01 / AFF4), Safe Mode, Verify, Write-Blocker, Throttle |
+| 2 | Acquisition Options | **Format dropdown** (RAW / **RAW+LZ4** / E01 / AFF4), **E01 Metadata** (Description + Notes — auto-enabled when E01 selected), Safe Mode, Verify, Write-Blocker, Throttle |
 | 3 | Advanced | **Signing key** picker + **SIEM/Syslog** fields (host, port, UDP/TCP, CEF) |
+
+> **Note:** The left panel is now wrapped in a `QScrollArea` — all fields remain accessible on smaller screens without squishing.
 
 ### Workflow Screens
 
@@ -268,7 +283,7 @@ NEW → CONTEXT_BOUND → ACQUIRING → VERIFYING → SEALED → DONE
 - Optional post-acquisition remote SHA-256 verification
 - Safe Mode (`conv=noerror,sync`), write-blocker, throttling
 - **Evidence format factory** — unified `create_evidence_writer()` eliminates if/elif duplication across engines
-- **E01 metadata headers** — case number, examiner name, description, and notes populated via `set_header_value()`
+- **E01 metadata headers** — case number, examiner name, description, and notes populated via `set_header_value()` (end-to-end: GUI fields + CLI `--description` / `--notes` → engine → pyewf)
 - **RawWriter fsync** — `flush()` + `os.fsync()` on close to guarantee data reaches disk
 - **Input validation** — disk paths validated against injection patterns and shell-quoted (`shlex.quote`); **IPv6 and hostname** support in GUI
 - **Graceful CLI stop (Ctrl+C)** — SIGINT handler stops engine, seals audit trail, then exits cleanly
@@ -310,6 +325,8 @@ NEW → CONTEXT_BOUND → ACQUIRING → VERIFYING → SEALED → DONE
 | `--write-blocker` | Software write-blocker |
 | `--throttle N` | Bandwidth limit in MB/s |
 | `--signing-key PATH` | Ed25519 key for audit trail signing |
+| `--description TEXT` | E01 header: evidence description (embedded in E01 metadata) |
+| `--notes TEXT` | E01 header: examiner notes (embedded in E01 metadata) |
 
 ### Triage Parameters
 

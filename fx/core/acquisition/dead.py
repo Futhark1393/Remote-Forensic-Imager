@@ -124,6 +124,8 @@ class DeadAcquisitionEngine:
         verify_hash: bool = False,
         write_blocker: bool = False,
         on_progress: Callable[[dict], None] | None = None,
+        description: str = "",
+        notes: str = "",
     ):
         self.source_path = source_path
         self.output_file = output_file
@@ -135,6 +137,8 @@ class DeadAcquisitionEngine:
         self.verify_hash = verify_hash
         self.write_blocker = write_blocker
         self.on_progress = on_progress or (lambda d: None)
+        self.description = description
+        self.notes = notes
 
         self._is_running = True
         self._elevated_proc: subprocess.Popen | None = None
@@ -173,6 +177,7 @@ class DeadAcquisitionEngine:
         return create_evidence_writer(
             self.format_type, self.output_file,
             case_number=self.case_no, examiner_name=self.examiner,
+            description=self.description, notes=self.notes,
         )
 
     # ── Post-acquisition verification ───────────────────────────────

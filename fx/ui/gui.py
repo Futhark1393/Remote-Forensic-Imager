@@ -214,6 +214,10 @@ class ForensicApp(QMainWindow):
         if hasattr(self, "btn_signing_key"):
             self.btn_signing_key.clicked.connect(self.select_signing_key)
 
+        # E01 metadata: enable/disable when format changes
+        if hasattr(self, "cmb_format"):
+            self.cmb_format.currentIndexChanged.connect(self._on_format_changed)
+
         # Open Dashboard button (if exists)
         if hasattr(self, "btn_open_dashboard"):
             self.btn_open_dashboard.clicked.connect(self.open_dashboard)
@@ -297,6 +301,10 @@ class ForensicApp(QMainWindow):
             self.chk_siem_cef.setToolTip("Use CEF (Common Event Format) instead of RFC 5424 syslog format.")
         if hasattr(self, "cmb_format"):
             self.cmb_format.setToolTip("RAW: raw disk image. RAW+LZ4: LZ4 compressed (fast, ~50% ratio). E01: EnCase format (needs libewf). AFF4: requires pyaff4.")
+        if hasattr(self, "txt_e01_description"):
+            self.txt_e01_description.setToolTip("Embedded in the E01 header. Visible in EnCase, Autopsy, FTK.")
+        if hasattr(self, "txt_e01_notes"):
+            self.txt_e01_notes.setToolTip("Examiner notes embedded in the E01 header. Visible in EnCase, Autopsy, FTK.")
 
     # ── Slot helpers ─────────────────────────────────────────────────
 
@@ -310,6 +318,13 @@ class ForensicApp(QMainWindow):
         for name in ("txt_siem_host", "txt_siem_port", "cmb_siem_protocol", "chk_siem_cef"):
             if hasattr(self, name):
                 getattr(self, name).setEnabled(checked)
+
+    def _on_format_changed(self, index: int) -> None:
+        """Enable E01 metadata fields only when E01 format is selected."""
+        format_label = self.cmb_format.currentText() if hasattr(self, "cmb_format") else ""
+        is_e01 = _FORMAT_MAP.get(format_label, "") == "E01"
+        if hasattr(self, "groupBox_e01_metadata"):
+            self.groupBox_e01_metadata.setEnabled(is_e01)
 
     # ── File pickers ─────────────────────────────────────────────────
 
@@ -699,7 +714,17 @@ class ForensicApp(QMainWindow):
                 "INFO", "TRIAGE_PARAMS",
             )
 
+        # Log E01 metadata if applicable
+        if self.format_type == "E01":
+            e01_desc_preview = e01_description[:60] if e01_description else "(empty)"
+            e01_notes_preview = e01_notes[:60] if e01_notes else "(empty)"
+            self.log(f"E01 Header → Description: {e01_desc_preview} | Notes: {e01_notes_preview}", "INFO", "E01_METADATA")
+
         # ── Launch worker ─────────────────────────────────────────────
+        # E01 metadata (description + notes)
+        e01_description = self.txt_e01_description.text().strip() if hasattr(self, "txt_e01_description") else ""
+        e01_notes = self.txt_e01_notes.text().strip() if hasattr(self, "txt_e01_notes") else ""
+
         self.worker = AcquisitionWorker(
             ip=ip,
             user=user,
@@ -719,6 +744,8 @@ class ForensicApp(QMainWindow):
             output_dir=self.output_dir,
             verify_hash=verify_hash,
             write_blocker=write_blocker,
+            description=e01_description,
+            notes=e01_notes,
         )
         self.worker.progress_signal.connect(self.update_progress_ui)
         self.worker.finished_signal.connect(self.on_acquisition_finished)
@@ -852,6 +879,16 @@ class ForensicApp(QMainWindow):
         )
 
         # ── Launch dead worker ────────────────────────────────────────
+        # E01 metadata (description + notes)
+        e01_description = self.txt_e01_description.text().strip() if hasattr(self, "txt_e01_description") else ""
+        e01_notes = self.txt_e01_notes.text().strip() if hasattr(self, "txt_e01_notes") else ""
+
+        # Log E01 metadata if applicable
+        if self.format_type == "E01":
+            e01_desc_preview = e01_description[:60] if e01_description else "(empty)"
+            e01_notes_preview = e01_notes[:60] if e01_notes else "(empty)"
+            self.log(f"E01 Header → Description: {e01_desc_preview} | Notes: {e01_notes_preview}", "INFO", "E01_METADATA")
+
         self.worker = DeadAcquisitionWorker(
             source_path=source_path,
             output_file=output_file,
@@ -862,6 +899,8 @@ class ForensicApp(QMainWindow):
             safe_mode=safe_mode,
             verify_hash=verify_hash,
             write_blocker=write_blocker,
+            description=e01_description,
+            notes=e01_notes,
         )
         self.worker.progress_signal.connect(self.update_progress_ui)
         self.worker.finished_signal.connect(self.on_acquisition_finished)

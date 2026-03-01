@@ -41,6 +41,8 @@ class AcquisitionWorker(QThread):
         output_dir: str = "",
         verify_hash: bool = False,
         write_blocker: bool = False,
+        description: str = "",
+        notes: str = "",
     ):
         super().__init__()
         self._engine = AcquisitionEngine(
@@ -63,6 +65,8 @@ class AcquisitionWorker(QThread):
             verify_hash=verify_hash,
             write_blocker=write_blocker,
             on_progress=self._on_progress,
+            description=description,
+            notes=notes,
         )
 
     def _on_progress(self, data: dict) -> None:
@@ -104,6 +108,8 @@ class DeadAcquisitionWorker(QThread):
         safe_mode: bool = True,
         verify_hash: bool = False,
         write_blocker: bool = False,
+        description: str = "",
+        notes: str = "",
     ):
         super().__init__()
         self._engine = DeadAcquisitionEngine(
@@ -117,6 +123,8 @@ class DeadAcquisitionWorker(QThread):
             verify_hash=verify_hash,
             write_blocker=write_blocker,
             on_progress=self._on_progress,
+            description=description,
+            notes=notes,
         )
 
     def _on_progress(self, data: dict) -> None:

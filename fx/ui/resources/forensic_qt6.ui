@@ -6,382 +6,620 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1200</width>
-    <height>860</height>
+    <width>1280</width>
+    <height>900</height>
    </rect>
+  </property>
+  <property name="minimumSize">
+   <size><width>1100</width><height>700</height></size>
   </property>
   <property name="windowTitle">
    <string>ForenXtract (FX)</string>
   </property>
+
   <widget class="QWidget" name="centralwidget">
-   <layout class="QHBoxLayout" name="horizontalLayout">
+   <layout class="QHBoxLayout" name="mainHLayout">
+    <property name="spacing"><number>8</number></property>
+    <property name="leftMargin"><number>6</number></property>
+    <property name="topMargin"><number>6</number></property>
+    <property name="rightMargin"><number>6</number></property>
+    <property name="bottomMargin"><number>6</number></property>
 
-    <!-- ══════ LEFT PANEL ══════ -->
+    <!-- ══════════════════════════════════════════════════════════════
+         LEFT PANEL  (scrollable)
+         ══════════════════════════════════════════════════════════════ -->
     <item>
-     <layout class="QVBoxLayout" name="verticalLayout_left">
+     <widget class="QScrollArea" name="scrollArea_left">
+      <property name="widgetResizable"><bool>true</bool></property>
+      <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+      <property name="minimumSize"><size><width>480</width><height>0</height></size></property>
+      <property name="maximumSize"><size><width>580</width><height>16777215</height></size></property>
+      <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+      <widget class="QWidget" name="scrollAreaContent">
+       <layout class="QVBoxLayout" name="verticalLayout_left">
+        <property name="spacing"><number>6</number></property>
+        <property name="leftMargin"><number>0</number></property>
+        <property name="topMargin"><number>0</number></property>
+        <property name="rightMargin"><number>4</number></property>
+        <property name="bottomMargin"><number>0</number></property>
 
-      <!-- 1. Case Identification (shared) -->
-      <item>
-       <widget class="QGroupBox" name="groupBox_case">
-        <property name="title"><string>1. Case Identification</string></property>
-        <layout class="QFormLayout" name="formLayout_case">
-         <item row="0" column="0"><widget class="QLabel" name="label"><property name="text"><string>Case No:</string></property></widget></item>
-         <item row="0" column="1">
-          <widget class="QLineEdit" name="txt_caseno">
-           <property name="placeholderText"><string>e.g., 2026-001</string></property>
-          </widget>
-         </item>
-         <item row="1" column="0"><widget class="QLabel" name="label_2"><property name="text"><string>Examiner:</string></property></widget></item>
-         <item row="1" column="1">
-          <widget class="QLineEdit" name="txt_examiner">
-           <property name="placeholderText"><string>Lead Investigator Name</string></property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-
-      <!-- ══════ TAB WIDGET: Acquisition Modes ══════ -->
-      <item>
-       <widget class="QTabWidget" name="tabWidget">
-        <property name="currentIndex"><number>0</number></property>
-
-        <!-- ══ TAB 0: Live Acquisition (Remote) ══ -->
-        <widget class="QWidget" name="tab_live">
-         <attribute name="title"><string>Live Acquisition (Remote)</string></attribute>
-         <layout class="QVBoxLayout" name="vLayout_tab_live">
-
-          <!-- Remote Server (SSH) -->
-          <item>
-           <widget class="QGroupBox" name="groupBox_server">
-            <property name="title"><string>Remote Server (SSH)</string></property>
-            <layout class="QFormLayout" name="formLayout_server">
-             <item row="0" column="0"><widget class="QLabel" name="label_3"><property name="text"><string>Target IP:</string></property></widget></item>
-             <item row="0" column="1">
-              <widget class="QLineEdit" name="txt_ip">
-               <property name="placeholderText"><string>e.g., 13.51.178.166</string></property>
-              </widget>
-             </item>
-             <item row="1" column="0"><widget class="QLabel" name="label_4"><property name="text"><string>Username:</string></property></widget></item>
-             <item row="1" column="1">
-              <widget class="QLineEdit" name="txt_user">
-               <property name="placeholderText"><string>e.g., ubuntu / root</string></property>
-              </widget>
-             </item>
-             <item row="2" column="0"><widget class="QLabel" name="label_5"><property name="text"><string>SSH Key:</string></property></widget></item>
-             <item row="2" column="1">
-              <layout class="QHBoxLayout" name="horizontalLayout_key">
-               <item>
-                <widget class="QLineEdit" name="txt_key">
-                 <property name="placeholderText"><string>Path to .pem file</string></property>
-                </widget>
-               </item>
-               <item><widget class="QPushButton" name="btn_file"><property name="text"><string>Select</string></property></widget></item>
-              </layout>
-             </item>
-            </layout>
-           </widget>
-          </item>
-
-          <!-- Evidence Target (Remote) -->
-          <item>
-           <widget class="QGroupBox" name="groupBox_disk">
-            <property name="title"><string>Evidence Target (Remote)</string></property>
-            <layout class="QVBoxLayout" name="verticalLayout_disk">
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_disk">
-               <item>
-                <widget class="QComboBox" name="cmb_disk">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="editable"><bool>true</bool></property>
-                </widget>
-               </item>
-               <item><widget class="QPushButton" name="btn_discover"><property name="text"><string>Auto-Detect (lsblk)</string></property></widget></item>
-              </layout>
-             </item>
-            </layout>
-           </widget>
-          </item>
-
-          <!-- Live Triage -->
-          <item>
-           <widget class="QGroupBox" name="groupBox_triage">
-            <property name="title"><string>Live Triage (read-only, pre-acquisition)</string></property>
-            <layout class="QVBoxLayout" name="verticalLayout_triage">
-             <item><widget class="QCheckBox" name="chk_triage"><property name="text"><string>Enable Live Triage</string></property></widget></item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_triage_sub">
-               <item><widget class="QLabel" name="label_triage_sub"><property name="text"><string>  Collect:</string></property></widget></item>
-               <item><widget class="QCheckBox" name="chk_triage_network"><property name="text"><string>Network</string></property></widget></item>
-               <item><widget class="QCheckBox" name="chk_triage_processes"><property name="text"><string>Processes</string></property></widget></item>
-               <item><widget class="QCheckBox" name="chk_triage_memory"><property name="text"><string>Memory</string></property></widget></item>
-               <item><widget class="QCheckBox" name="chk_triage_hash_exes"><property name="text"><string>Hash EXEs</string></property></widget></item>
-               <item>
-                <spacer name="horizontalSpacer_triage">
-                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
-                 <property name="sizeHint"><size><width>40</width><height>20</height></size></property>
-                </spacer>
-               </item>
-              </layout>
-             </item>
-            </layout>
-           </widget>
-          </item>
-
-          <item>
-           <spacer name="verticalSpacer_live">
-            <property name="orientation"><enum>Qt::Vertical</enum></property>
-            <property name="sizeHint"><size><width>20</width><height>10</height></size></property>
-           </spacer>
-          </item>
-
-         </layout>
-        </widget>
-
-        <!-- ══ TAB 1: Dead Acquisition (Local) ══ -->
-        <widget class="QWidget" name="tab_dead">
-         <attribute name="title"><string>Dead Acquisition (Local)</string></attribute>
-         <layout class="QVBoxLayout" name="vLayout_tab_dead">
-
-          <!-- Source Device (Local) -->
-          <item>
-           <widget class="QGroupBox" name="groupBox_dead_disk">
-            <property name="title"><string>Source Device</string></property>
-            <layout class="QVBoxLayout" name="verticalLayout_dead_disk">
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_dead_disk">
-               <item>
-                <widget class="QComboBox" name="cmb_dead_disk">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="editable"><bool>true</bool></property>
-                </widget>
-               </item>
-               <item><widget class="QPushButton" name="btn_dead_discover"><property name="text"><string>Auto-Detect (lsblk)</string></property></widget></item>
-              </layout>
-             </item>
-             <item>
-              <widget class="QLabel" name="lbl_dead_info">
-               <property name="text"><string>Select a locally attached block device (e.g., /dev/sdb) for forensic imaging.</string></property>
-               <property name="wordWrap"><bool>true</bool></property>
-               <property name="styleSheet"><string>color: #888; font-style: italic;</string></property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-
-          <!-- Or: Source Folder -->
-          <item>
-           <widget class="QGroupBox" name="groupBox_dead_image">
-            <property name="title"><string>Or: Source Folder (Logical Acquisition)</string></property>
-            <layout class="QVBoxLayout" name="verticalLayout_dead_image">
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_dead_image">
-               <item>
-                <widget class="QLineEdit" name="txt_dead_image">
-                 <property name="placeholderText"><string>Path to source folder (overrides device above)</string></property>
-                </widget>
-               </item>
-               <item><widget class="QPushButton" name="btn_dead_image"><property name="text"><string>Browse...</string></property></widget></item>
-              </layout>
-             </item>
-             <item>
-              <widget class="QLabel" name="lbl_dead_image_info">
-               <property name="text"><string>Select a folder for logical acquisition. Contents are archived (tar) and written to the forensic image.</string></property>
-               <property name="wordWrap"><bool>true</bool></property>
-               <property name="styleSheet"><string>color: #888; font-style: italic;</string></property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-
-          <item>
-           <spacer name="verticalSpacer_dead">
-            <property name="orientation"><enum>Qt::Vertical</enum></property>
-            <property name="sizeHint"><size><width>20</width><height>10</height></size></property>
-           </spacer>
-          </item>
-
-         </layout>
-        </widget>
-
-       </widget>
-      </item>
-
-      <!-- ══════ SHARED: Acquisition Options ══════ -->
-      <item>
-       <widget class="QGroupBox" name="groupBox_options">
-        <property name="title"><string>Acquisition Options</string></property>
-        <layout class="QVBoxLayout" name="verticalLayout_options">
-
-         <!-- Format -->
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_format">
-           <item><widget class="QLabel" name="label_format"><property name="text"><string>Evidence Format:</string></property></widget></item>
-           <item>
-            <widget class="QComboBox" name="cmb_format">
-             <item><property name="text"><string>RAW (.raw)</string></property></item>
-             <item><property name="text"><string>RAW+LZ4 (.raw.lz4)</string></property></item>
-             <item><property name="text"><string>E01 (EnCase)</string></property></item>
-             <item><property name="text"><string>AFF4</string></property></item>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacer_format">
-             <property name="orientation"><enum>Qt::Horizontal</enum></property>
-             <property name="sizeHint"><size><width>40</width><height>20</height></size></property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-
-         <item><widget class="QCheckBox" name="chk_safety"><property name="text"><string>Safe Mode (pad unreadable sectors with zeros)</string></property></widget></item>
-         <item><widget class="QCheckBox" name="chk_verify"><property name="text"><string>Verify Integrity (Post-Acquisition Hash Match)</string></property><property name="toolTip"><string>Re-read source and compare SHA-256 against on-the-fly stream hash.</string></property></widget></item>
-         <item><widget class="QCheckBox" name="chk_writeblock"><property name="text"><string>Enable Software Write-Blocker</string></property></widget></item>
-
-         <!-- Throttle -->
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_throttle">
-           <item><widget class="QCheckBox" name="chk_throttle"><property name="text"><string>Limit Bandwidth</string></property></widget></item>
-           <item>
-            <widget class="QLineEdit" name="txt_throttle">
-             <property name="minimumSize"><size><width>100</width><height>0</height></size></property>
-             <property name="maximumSize"><size><width>130</width><height>16777215</height></size></property>
-             <property name="placeholderText"><string>MB/s</string></property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacer_throttle">
-             <property name="orientation"><enum>Qt::Horizontal</enum></property>
-             <property name="sizeHint"><size><width>40</width><height>20</height></size></property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-
-        </layout>
-       </widget>
-      </item>
-
-      <!-- ══════ SHARED: Advanced ══════ -->
-      <item>
-       <widget class="QGroupBox" name="groupBox_advanced">
-        <property name="title"><string>Advanced</string></property>
-        <layout class="QVBoxLayout" name="verticalLayout_advanced">
-
-         <!-- Signing Key -->
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_signing">
-           <item><widget class="QLabel" name="label_signing"><property name="text"><string>Signing Key:</string></property></widget></item>
-           <item>
-            <widget class="QLineEdit" name="txt_signing_key">
-             <property name="placeholderText"><string>Ed25519 .key file (optional)</string></property>
-            </widget>
-           </item>
-           <item><widget class="QPushButton" name="btn_signing_key"><property name="text"><string>Select</string></property></widget></item>
-          </layout>
-         </item>
-
-         <!-- SIEM toggle -->
-         <item><widget class="QCheckBox" name="chk_siem"><property name="text"><string>Forward Audit Logs to SIEM / Syslog</string></property></widget></item>
-
-         <!-- SIEM fields -->
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_siem">
-           <item><widget class="QLabel" name="label_siem_host"><property name="text"><string>  Host:</string></property></widget></item>
-           <item>
-            <widget class="QLineEdit" name="txt_siem_host">
-             <property name="placeholderText"><string>10.0.0.100</string></property>
-             <property name="enabled"><bool>false</bool></property>
-            </widget>
-           </item>
-           <item><widget class="QLabel" name="label_siem_port"><property name="text"><string>Port:</string></property></widget></item>
-           <item>
-            <widget class="QLineEdit" name="txt_siem_port">
-             <property name="maximumSize"><size><width>70</width><height>16777215</height></size></property>
-             <property name="placeholderText"><string>514</string></property>
-             <property name="enabled"><bool>false</bool></property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QComboBox" name="cmb_siem_protocol">
-             <property name="enabled"><bool>false</bool></property>
-             <item><property name="text"><string>UDP</string></property></item>
-             <item><property name="text"><string>TCP</string></property></item>
-            </widget>
-           </item>
-           <item>
-            <widget class="QCheckBox" name="chk_siem_cef">
-             <property name="text"><string>CEF</string></property>
-             <property name="enabled"><bool>false</bool></property>
-             <property name="toolTip"><string>Use Common Event Format instead of RFC 5424</string></property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-
-        </layout>
-       </widget>
-      </item>
-
-      <item>
-       <spacer name="verticalSpacer">
-        <property name="orientation"><enum>Qt::Vertical</enum></property>
-        <property name="sizeHint"><size><width>20</width><height>10</height></size></property>
-       </spacer>
-      </item>
-
-      <!-- ══════ SHARED: Action Buttons ══════ -->
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_actions">
+        <!-- ─── 1. Case Identification ─────────────────────────── -->
         <item>
-         <widget class="QPushButton" name="btn_start">
-          <property name="text"><string>START ACQUISITION</string></property>
-          <property name="minimumSize"><size><width>0</width><height>50</height></size></property>
+         <widget class="QGroupBox" name="groupBox_case">
+          <property name="title"><string>1. Case Identification</string></property>
+          <layout class="QVBoxLayout" name="vLayout_case">
+           <property name="spacing"><number>6</number></property>
+           <property name="topMargin"><number>18</number></property>
+           <item>
+            <layout class="QHBoxLayout" name="hLayout_caseno">
+             <property name="spacing"><number>8</number></property>
+             <item>
+              <widget class="QLabel" name="label">
+               <property name="text"><string>Case No:</string></property>
+               <property name="minimumSize"><size><width>80</width><height>0</height></size></property>
+               <property name="maximumSize"><size><width>80</width><height>16777215</height></size></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="txt_caseno">
+               <property name="placeholderText"><string>e.g., 2026-001</string></property>
+               <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="hLayout_examiner">
+             <property name="spacing"><number>8</number></property>
+             <item>
+              <widget class="QLabel" name="label_2">
+               <property name="text"><string>Examiner:</string></property>
+               <property name="minimumSize"><size><width>80</width><height>0</height></size></property>
+               <property name="maximumSize"><size><width>80</width><height>16777215</height></size></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="txt_examiner">
+               <property name="placeholderText"><string>Lead Investigator Name</string></property>
+               <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
          </widget>
         </item>
+
+        <!-- ─── TAB WIDGET: Acquisition Modes ──────────────────── -->
         <item>
-         <widget class="QPushButton" name="btn_stop">
-          <property name="text"><string>STOP / ABORT</string></property>
-          <property name="minimumSize"><size><width>0</width><height>50</height></size></property>
-          <property name="enabled"><bool>false</bool></property>
+         <widget class="QTabWidget" name="tabWidget">
+          <property name="currentIndex"><number>0</number></property>
+
+          <!-- ── TAB 0: Live Acquisition (Remote) ── -->
+          <widget class="QWidget" name="tab_live">
+           <attribute name="title"><string>Live Acquisition (Remote)</string></attribute>
+           <layout class="QVBoxLayout" name="vLayout_tab_live">
+            <property name="spacing"><number>6</number></property>
+
+            <!-- Remote Server (SSH) -->
+            <item>
+             <widget class="QGroupBox" name="groupBox_server">
+              <property name="title"><string>Remote Server (SSH)</string></property>
+              <layout class="QVBoxLayout" name="vLayout_server">
+               <property name="spacing"><number>6</number></property>
+               <property name="topMargin"><number>18</number></property>
+               <item>
+                <layout class="QHBoxLayout" name="hLayout_ip">
+                 <property name="spacing"><number>8</number></property>
+                 <item>
+                  <widget class="QLabel" name="label_3">
+                   <property name="text"><string>Target IP:</string></property>
+                   <property name="minimumSize"><size><width>80</width><height>0</height></size></property>
+                   <property name="maximumSize"><size><width>80</width><height>16777215</height></size></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="txt_ip">
+                   <property name="placeholderText"><string>e.g., 13.51.178.166</string></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="hLayout_user">
+                 <property name="spacing"><number>8</number></property>
+                 <item>
+                  <widget class="QLabel" name="label_4">
+                   <property name="text"><string>Username:</string></property>
+                   <property name="minimumSize"><size><width>80</width><height>0</height></size></property>
+                   <property name="maximumSize"><size><width>80</width><height>16777215</height></size></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="txt_user">
+                   <property name="placeholderText"><string>e.g., ubuntu / root</string></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="hLayout_key">
+                 <property name="spacing"><number>8</number></property>
+                 <item>
+                  <widget class="QLabel" name="label_5">
+                   <property name="text"><string>SSH Key:</string></property>
+                   <property name="minimumSize"><size><width>80</width><height>0</height></size></property>
+                   <property name="maximumSize"><size><width>80</width><height>16777215</height></size></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="txt_key">
+                   <property name="placeholderText"><string>Path to .pem file</string></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_file">
+                   <property name="text"><string>Select</string></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+
+            <!-- Evidence Target (Remote) -->
+            <item>
+             <widget class="QGroupBox" name="groupBox_disk">
+              <property name="title"><string>Evidence Target (Remote)</string></property>
+              <layout class="QVBoxLayout" name="vLayout_disk">
+               <property name="topMargin"><number>18</number></property>
+               <item>
+                <layout class="QHBoxLayout" name="hLayout_disk">
+                 <property name="spacing"><number>8</number></property>
+                 <item>
+                  <widget class="QComboBox" name="cmb_disk">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                     <horstretch>0</horstretch><verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="editable"><bool>true</bool></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_discover">
+                   <property name="text"><string>Auto-Detect (lsblk)</string></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+
+            <!-- Live Triage -->
+            <item>
+             <widget class="QGroupBox" name="groupBox_triage">
+              <property name="title"><string>Live Triage (read-only, pre-acquisition)</string></property>
+              <layout class="QVBoxLayout" name="vLayout_triage">
+               <property name="spacing"><number>4</number></property>
+               <property name="topMargin"><number>18</number></property>
+               <item>
+                <widget class="QCheckBox" name="chk_triage">
+                 <property name="text"><string>Enable Live Triage</string></property>
+                </widget>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="hLayout_triage_sub">
+                 <item><widget class="QLabel" name="label_triage_sub"><property name="text"><string>  Collect:</string></property></widget></item>
+                 <item><widget class="QCheckBox" name="chk_triage_network"><property name="text"><string>Network</string></property></widget></item>
+                 <item><widget class="QCheckBox" name="chk_triage_processes"><property name="text"><string>Processes</string></property></widget></item>
+                 <item><widget class="QCheckBox" name="chk_triage_memory"><property name="text"><string>Memory</string></property></widget></item>
+                 <item><widget class="QCheckBox" name="chk_triage_hash_exes"><property name="text"><string>Hash EXEs</string></property></widget></item>
+                 <item>
+                  <spacer name="hSpacer_triage">
+                   <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                   <property name="sizeHint"><size><width>20</width><height>20</height></size></property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+
+            <item>
+             <spacer name="vSpacer_live">
+              <property name="orientation"><enum>Qt::Vertical</enum></property>
+              <property name="sizeHint"><size><width>20</width><height>5</height></size></property>
+             </spacer>
+            </item>
+           </layout>
+          </widget>
+
+          <!-- ── TAB 1: Dead Acquisition (Local) ── -->
+          <widget class="QWidget" name="tab_dead">
+           <attribute name="title"><string>Dead Acquisition (Local)</string></attribute>
+           <layout class="QVBoxLayout" name="vLayout_tab_dead">
+            <property name="spacing"><number>6</number></property>
+
+            <!-- Source Device (Local) -->
+            <item>
+             <widget class="QGroupBox" name="groupBox_dead_disk">
+              <property name="title"><string>Source Device</string></property>
+              <layout class="QVBoxLayout" name="vLayout_dead_disk">
+               <property name="spacing"><number>4</number></property>
+               <property name="topMargin"><number>18</number></property>
+               <item>
+                <layout class="QHBoxLayout" name="hLayout_dead_disk">
+                 <property name="spacing"><number>8</number></property>
+                 <item>
+                  <widget class="QComboBox" name="cmb_dead_disk">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                     <horstretch>0</horstretch><verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="editable"><bool>true</bool></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_dead_discover">
+                   <property name="text"><string>Auto-Detect (lsblk)</string></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_dead_info">
+                 <property name="text"><string>Select a locally attached block device (e.g., /dev/sdb) for forensic imaging.</string></property>
+                 <property name="wordWrap"><bool>true</bool></property>
+                 <property name="styleSheet"><string>color: #888; font-style: italic;</string></property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+
+            <!-- Or: Source Folder -->
+            <item>
+             <widget class="QGroupBox" name="groupBox_dead_image">
+              <property name="title"><string>Or: Source Folder (Logical Acquisition)</string></property>
+              <layout class="QVBoxLayout" name="vLayout_dead_image">
+               <property name="spacing"><number>4</number></property>
+               <property name="topMargin"><number>18</number></property>
+               <item>
+                <layout class="QHBoxLayout" name="hLayout_dead_image">
+                 <property name="spacing"><number>8</number></property>
+                 <item>
+                  <widget class="QLineEdit" name="txt_dead_image">
+                   <property name="placeholderText"><string>Path to source folder (overrides device above)</string></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_dead_image">
+                   <property name="text"><string>Browse...</string></property>
+                   <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_dead_image_info">
+                 <property name="text"><string>Select a folder for logical acquisition. Contents are archived (tar) and written to the forensic image.</string></property>
+                 <property name="wordWrap"><bool>true</bool></property>
+                 <property name="styleSheet"><string>color: #888; font-style: italic;</string></property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+
+            <item>
+             <spacer name="vSpacer_dead">
+              <property name="orientation"><enum>Qt::Vertical</enum></property>
+              <property name="sizeHint"><size><width>20</width><height>5</height></size></property>
+             </spacer>
+            </item>
+           </layout>
+          </widget>
+
          </widget>
         </item>
+
+        <!-- ─── Acquisition Options ────────────────────────────── -->
+        <item>
+         <widget class="QGroupBox" name="groupBox_options">
+          <property name="title"><string>Acquisition Options</string></property>
+          <layout class="QVBoxLayout" name="vLayout_options">
+           <property name="spacing"><number>8</number></property>
+           <property name="topMargin"><number>18</number></property>
+
+           <!-- Evidence Format -->
+           <item>
+            <layout class="QHBoxLayout" name="hLayout_format">
+             <property name="spacing"><number>8</number></property>
+             <item>
+              <widget class="QLabel" name="label_format">
+               <property name="text"><string>Evidence Format:</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="cmb_format">
+               <property name="minimumSize"><size><width>180</width><height>30</height></size></property>
+               <item><property name="text"><string>RAW (.raw)</string></property></item>
+               <item><property name="text"><string>RAW+LZ4 (.raw.lz4)</string></property></item>
+               <item><property name="text"><string>E01 (EnCase)</string></property></item>
+               <item><property name="text"><string>AFF4</string></property></item>
+              </widget>
+             </item>
+             <item>
+              <spacer name="hSpacer_format">
+               <property name="orientation"><enum>Qt::Horizontal</enum></property>
+               <property name="sizeHint"><size><width>40</width><height>20</height></size></property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+
+           <!-- E01 Metadata -->
+           <item>
+            <widget class="QGroupBox" name="groupBox_e01_metadata">
+             <property name="title"><string>E01 Metadata (Header)</string></property>
+             <property name="enabled"><bool>false</bool></property>
+             <layout class="QVBoxLayout" name="vLayout_e01">
+              <property name="spacing"><number>8</number></property>
+              <property name="topMargin"><number>22</number></property>
+              <property name="bottomMargin"><number>10</number></property>
+              <property name="leftMargin"><number>12</number></property>
+              <property name="rightMargin"><number>12</number></property>
+              <item>
+               <layout class="QHBoxLayout" name="hLayout_e01_desc">
+                <property name="spacing"><number>10</number></property>
+                <item>
+                 <widget class="QLabel" name="label_e01_desc">
+                  <property name="text"><string>Description:</string></property>
+                  <property name="minimumSize"><size><width>90</width><height>32</height></size></property>
+                  <property name="maximumSize"><size><width>90</width><height>32</height></size></property>
+                  <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLineEdit" name="txt_e01_description">
+                  <property name="placeholderText"><string>Evidence description (e.g., Suspect laptop HDD)</string></property>
+                  <property name="minimumSize"><size><width>0</width><height>32</height></size></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="hLayout_e01_notes">
+                <property name="spacing"><number>10</number></property>
+                <item>
+                 <widget class="QLabel" name="label_e01_notes">
+                  <property name="text"><string>Notes:</string></property>
+                  <property name="minimumSize"><size><width>90</width><height>32</height></size></property>
+                  <property name="maximumSize"><size><width>90</width><height>32</height></size></property>
+                  <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLineEdit" name="txt_e01_notes">
+                  <property name="placeholderText"><string>Examiner notes (e.g., Seized under warrant #12345)</string></property>
+                  <property name="minimumSize"><size><width>0</width><height>32</height></size></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+
+           <!-- Checkboxes -->
+           <item>
+            <widget class="QCheckBox" name="chk_safety">
+             <property name="text"><string>Safe Mode (pad unreadable sectors with zeros)</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="chk_verify">
+             <property name="text"><string>Verify Integrity (Post-Acquisition Hash Match)</string></property>
+             <property name="toolTip"><string>Re-read source and compare SHA-256 against on-the-fly stream hash.</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="chk_writeblock">
+             <property name="text"><string>Enable Software Write-Blocker</string></property>
+            </widget>
+           </item>
+
+           <!-- Throttle -->
+           <item>
+            <layout class="QHBoxLayout" name="hLayout_throttle">
+             <property name="spacing"><number>8</number></property>
+             <item>
+              <widget class="QCheckBox" name="chk_throttle">
+               <property name="text"><string>Limit Bandwidth</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="txt_throttle">
+               <property name="minimumSize"><size><width>100</width><height>28</height></size></property>
+               <property name="maximumSize"><size><width>130</width><height>16777215</height></size></property>
+               <property name="placeholderText"><string>MB/s</string></property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="hSpacer_throttle">
+               <property name="orientation"><enum>Qt::Horizontal</enum></property>
+               <property name="sizeHint"><size><width>40</width><height>20</height></size></property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+
+          </layout>
+         </widget>
+        </item>
+
+        <!-- ─── Advanced ───────────────────────────────────────── -->
+        <item>
+         <widget class="QGroupBox" name="groupBox_advanced">
+          <property name="title"><string>Advanced</string></property>
+          <layout class="QVBoxLayout" name="vLayout_advanced">
+           <property name="spacing"><number>8</number></property>
+           <property name="topMargin"><number>18</number></property>
+
+           <!-- Signing Key -->
+           <item>
+            <layout class="QHBoxLayout" name="hLayout_signing">
+             <property name="spacing"><number>8</number></property>
+             <item>
+              <widget class="QLabel" name="label_signing">
+               <property name="text"><string>Signing Key:</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="txt_signing_key">
+               <property name="placeholderText"><string>Ed25519 .key file (optional)</string></property>
+               <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btn_signing_key">
+               <property name="text"><string>Select</string></property>
+               <property name="minimumSize"><size><width>0</width><height>30</height></size></property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+
+           <!-- SIEM toggle -->
+           <item>
+            <widget class="QCheckBox" name="chk_siem">
+             <property name="text"><string>Forward Audit Logs to SIEM / Syslog</string></property>
+            </widget>
+           </item>
+
+           <!-- SIEM fields -->
+           <item>
+            <layout class="QHBoxLayout" name="hLayout_siem">
+             <property name="spacing"><number>6</number></property>
+             <item>
+              <widget class="QLabel" name="label_siem_host">
+               <property name="text"><string>  Host:</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="txt_siem_host">
+               <property name="placeholderText"><string>10.0.0.100</string></property>
+               <property name="enabled"><bool>false</bool></property>
+               <property name="minimumSize"><size><width>0</width><height>28</height></size></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="label_siem_port">
+               <property name="text"><string>Port:</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="txt_siem_port">
+               <property name="maximumSize"><size><width>70</width><height>16777215</height></size></property>
+               <property name="placeholderText"><string>514</string></property>
+               <property name="enabled"><bool>false</bool></property>
+               <property name="minimumSize"><size><width>50</width><height>28</height></size></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="cmb_siem_protocol">
+               <property name="enabled"><bool>false</bool></property>
+               <property name="minimumSize"><size><width>0</width><height>28</height></size></property>
+               <item><property name="text"><string>UDP</string></property></item>
+               <item><property name="text"><string>TCP</string></property></item>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="chk_siem_cef">
+               <property name="text"><string>CEF</string></property>
+               <property name="enabled"><bool>false</bool></property>
+               <property name="toolTip"><string>Use Common Event Format instead of RFC 5424</string></property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Bottom spacer -->
+        <item>
+         <spacer name="vSpacer_bottom">
+          <property name="orientation"><enum>Qt::Vertical</enum></property>
+          <property name="sizeHint"><size><width>20</width><height>5</height></size></property>
+         </spacer>
+        </item>
+
+        <!-- ─── Action Buttons ─────────────────────────────────── -->
+        <item>
+         <layout class="QHBoxLayout" name="hLayout_actions">
+          <property name="spacing"><number>8</number></property>
+          <item>
+           <widget class="QPushButton" name="btn_start">
+            <property name="text"><string>START ACQUISITION</string></property>
+            <property name="minimumSize"><size><width>0</width><height>46</height></size></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_stop">
+            <property name="text"><string>STOP / ABORT</string></property>
+            <property name="minimumSize"><size><width>0</width><height>46</height></size></property>
+            <property name="enabled"><bool>false</bool></property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+
+        <item>
+         <widget class="QProgressBar" name="progressBar">
+          <property name="value"><number>0</number></property>
+          <property name="minimumSize"><size><width>0</width><height>22</height></size></property>
+         </widget>
+        </item>
+
        </layout>
-      </item>
-
-      <item>
-       <widget class="QProgressBar" name="progressBar">
-        <property name="value"><number>0</number></property>
-       </widget>
-      </item>
-
-     </layout>
+      </widget>
+     </widget>
     </item>
 
-    <!-- ══════ RIGHT: Console ══════ -->
+    <!-- ══════════════════════════════════════════════════════════════
+         RIGHT PANEL  (Console)
+         ══════════════════════════════════════════════════════════════ -->
     <item>
      <widget class="QGroupBox" name="groupBox_log">
       <property name="title"><string>Live Acquisition Console</string></property>
-      <layout class="QVBoxLayout" name="verticalLayout_log">
-       <item><widget class="QTextEdit" name="txt_log"/></item>
+      <layout class="QVBoxLayout" name="vLayout_log">
+       <property name="topMargin"><number>18</number></property>
+       <item>
+        <widget class="QTextEdit" name="txt_log"/>
+       </item>
       </layout>
      </widget>
     </item>
 
    </layout>
   </widget>
+
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <resources/>

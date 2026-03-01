@@ -80,6 +80,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--write-blocker", action="store_true", help="Apply software write-blocker")
     p.add_argument("--throttle", type=float, default=0.0, help="Bandwidth limit in MB/s (0 = unlimited)")
     p.add_argument("--signing-key", help="Path to Ed25519 private key for audit trail signing")
+    p.add_argument("--description", default="", help="E01 header: evidence description (embedded in E01 metadata)")
+    p.add_argument("--notes", default="", help="E01 header: examiner notes (embedded in E01 metadata)")
 
     # Optional — triage
     p.add_argument("--triage", action="store_true", help="Run live triage (network + processes) before acquisition")
@@ -213,6 +215,13 @@ def main() -> int:
         f"{C3}Triage{C0}    {'✓' if (not is_dead and args.triage) else '✗'}{' (N/A for dead)' if is_dead else ''}  {C3}SIEM{C0} {'✓ ' + args.siem_host if args.siem_host else '✗'}",
     ]
 
+    # E01 metadata info (only when E01 format is used)
+    if args.format == "E01" and (args.description or args.notes):
+        if args.description:
+            info.append(f"{C3}E01 Desc{C0}  {args.description}")
+        if args.notes:
+            info.append(f"{C3}E01 Notes{C0} {args.notes}")
+
     print()
     for i in range(max(len(logo), len(info))):
         left = logo[i] if i < len(logo) else ""
@@ -264,6 +273,8 @@ def main() -> int:
             verify_hash=args.verify,
             write_blocker=args.write_blocker,
             on_progress=cli_progress,
+            description=args.description,
+            notes=args.notes,
         )
     else:
         engine = AcquisitionEngine(
@@ -286,6 +297,8 @@ def main() -> int:
             verify_hash=args.verify,
             write_blocker=args.write_blocker,
             on_progress=cli_progress,
+            description=args.description,
+            notes=args.notes,
         )
 
     _active_engine = engine
