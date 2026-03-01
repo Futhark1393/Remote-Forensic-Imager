@@ -127,6 +127,7 @@ class DeadAcquisitionEngine:
         on_progress: Callable[[dict], None] | None = None,
         description: str = "",
         notes: str = "",
+        split_size: int = 0,
     ):
         self.source_path = source_path
         self.output_file = output_file
@@ -140,6 +141,7 @@ class DeadAcquisitionEngine:
         self.on_progress = on_progress or (lambda d: None)
         self.description = description
         self.notes = notes
+        self.split_size = split_size
 
         self._is_running = True
         self._elevated_proc: subprocess.Popen | None = None
@@ -187,6 +189,7 @@ class DeadAcquisitionEngine:
             self.format_type, self.output_file,
             case_number=self.case_no, examiner_name=self.examiner,
             description=self.description, notes=self.notes,
+            split_size=self.split_size,
         )
 
     # ── Post-acquisition verification ───────────────────────────────
@@ -584,8 +587,12 @@ class DeadAcquisitionEngine:
             # Post-acquisition output re-verification (re-read written file)
             output_sha256 = "SKIPPED"
             output_match = None
-            if self._is_running and self.format_type == "RAW":
+            if self._is_running and self.format_type == "RAW" and self.split_size == 0:
                 output_sha256, output_match = self._verify_output(hasher.sha256_hex)
+
+            # Collect split segment info
+            segment_count = getattr(writer, 'segment_count', 1)
+            segment_paths = getattr(writer, 'segment_paths', [self.output_file])
 
             return {
                 "sha256_final": hasher.sha256_hex,
@@ -599,6 +606,8 @@ class DeadAcquisitionEngine:
                 "error_map_paths": error_map_paths,
                 "output_sha256": output_sha256,
                 "output_match": output_match,
+                "split_segment_count": segment_count,
+                "split_segment_paths": segment_paths,
             }
 
         except DeadAcquisitionError:

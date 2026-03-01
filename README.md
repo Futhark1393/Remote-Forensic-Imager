@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/Futhark1393/ForenXtract/actions/workflows/python-ci.yml/badge.svg)
 
-**Author:** Kemal Sebzeci · **Version:** 3.8.0 · **License:** Apache-2.0
+**Author:** Kemal Sebzeci · **Version:** 3.9.0 · **License:** Apache-2.0
 
 ForenXtract (FX) is a **case-first forensic disk acquisition framework** built with **Python + PyQt6**. It supports both **Live (Remote/SSH)** and **Dead (Local)** acquisition through a tabbed GUI and a fully headless CLI.
 
@@ -11,6 +11,7 @@ ForenXtract (FX) is a **case-first forensic disk acquisition framework** built w
 - **Tamper-evident JSONL audit trail** with cryptographic hash chaining + optional Ed25519 signing
 - **Interactive CLI wizard** (`fx-acquire -i`) — step-by-step guided acquisition, no flags to memorize
 - **DDSecure-style bad sector error map** — granular offset list of unreadable sectors (text log + JSON + ddrescue mapfile)
+- **Split Image support** — `--split-size 2G` splits output into FAT32/DVD-safe segments (`.001`, `.002`, …)
 - **Real-time input validation** in GUI with visual feedback
 - Four output formats: **RAW**, **RAW+LZ4**, **E01**, **AFF4**
 - Live triage (network, processes, memory) with **interactive HTML dashboard**
@@ -27,6 +28,7 @@ ForenXtract (FX) is a **case-first forensic disk acquisition framework** built w
 - [Core Capabilities](#core-capabilities)
 - [Evidence Formats](#evidence-formats)
 - [Bad Sector Error Map](#bad-sector-error-map)
+- [Split Image](#split-image)
 - [Live Triage & Dashboard](#live-triage--dashboard)
 - [Architecture](#architecture)
 - [Output Artifacts](#output-artifacts)
@@ -290,6 +292,7 @@ Walks through all parameters interactively with defaults, validation, and tab co
 | `--signing-key PATH` | Ed25519 key for audit trail signing |
 | `--description TEXT` | E01 header: evidence description |
 | `--notes TEXT` | E01 header: examiner notes |
+| `--split-size SIZE` | Split image into segments (e.g., `2G`, `4G`, `650M`) |
 
 ### Triage Parameters (Live Mode Only)
 
@@ -326,6 +329,12 @@ fx-acquire --dead \
   --source /dev/sdb --output-dir ./evidence \
   --case 2026-001 --examiner "Investigator" \
   --format RAW+LZ4 --verify --write-blocker
+
+# Split image for FAT32 USB drive
+fx-acquire --dead \
+  --source /dev/sdb --output-dir /mnt/fat32usb/evidence \
+  --case 2026-001 --examiner "Investigator" \
+  --format RAW --split-size 2G
 ~~~
 
 ## `fx-verify` — Audit Chain Verification
@@ -376,6 +385,40 @@ NEW → CONTEXT_BOUND → ACQUIRING → VERIFYING → SEALED → DONE
 - **Privilege elevation** — `pkexec` for block-device access (no password in terminal)
 - Graceful stop: Ctrl+C in CLI seals audit trail; Stop button in GUI force-closes SSH
 - Automatic retry on connection loss (up to 3 retries with resume)
+
+---
+
+# Split Image
+
+Large evidence images often need to be stored on **FAT32** media (USB drives, external HDDs) or split across **DVD/CD** volumes. FX supports splitting the output image into fixed-size segments with `--split-size`.
+
+### Usage
+
+~~~bash
+fx-acquire --dead --source /dev/sdb --output-dir ./evidence \
+  --case 2026-001 --examiner "Investigator" \
+  --split-size 2G
+~~~
+
+The interactive wizard (`fx-acquire -i`) also offers preset sizes:
+
+| Preset | Size | Use Case |
+|--------|------|----------|
+| 650M | 650 MB | CD-R |
+| 2G | 2 GB | **FAT32** (safe limit) |
+| 4G | 4 GB | DVD-DL |
+| Custom | User-defined | Any size ≥ 1M |
+
+### How It Works
+
+- Output files are named `.001`, `.002`, `.003`, … (e.g., `evidence_2026-001.raw.001`)
+- **E01 format** uses pyewf's native `set_maximum_segment_size()` — no wrapper needed
+- All other formats use FX's `SplitWriter` wrapper that transparently rotates files at the segment boundary
+- **Stream hashing** (SHA-256 / MD5) covers the entire raw data stream across all segments
+- Segment count and paths are recorded in the forensic report (TXT + PDF)
+
+> [!NOTE]
+> When splitting is active, the output re-verification step (single-file SHA-256) is skipped since the image spans multiple files. Stream-level integrity is still preserved.
 
 ---
 
@@ -529,6 +572,7 @@ fx/
 │       ├── base.py             # AcquisitionEngine + evidence writer factory
 │       ├── dead.py             # DeadAcquisitionEngine (granular bad sector retry, re-verify)
 │       ├── bad_sector_map.py   # DDSecure-style error map (text log + JSON + ddrescue mapfile)
+│       ├── split_writer.py     # SplitWriter wrapper + size parsing (FAT32 segment support)
 │       ├── raw.py              # RawWriter (with fsync)
 │       ├── ewf.py              # EwfWriter (with E01 metadata)
 │       ├── lz4_writer.py       # LZ4Writer
@@ -553,6 +597,7 @@ fx/
 | File | Description |
 |------|-------------|
 | `evidence_<CASE>_<UTC>.*` | Disk image (`.raw` / `.raw.lz4` / `.E01` / `.aff4`) |
+| `evidence_<CASE>_<UTC>.*.001…` | Split image segments (when `--split-size` is used) |
 | `*.bad_sectors.log` | Bad sector error map — DDSecure-style text offset table |
 | `*.bad_sectors.json` | Bad sector error map — machine-readable JSON |
 | `*.bad_sectors.mapfile` | Bad sector error map — GNU ddrescue-compatible mapfile |

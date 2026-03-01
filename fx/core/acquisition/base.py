@@ -19,6 +19,7 @@ from fx.core.acquisition.ewf import EwfWriter, EWF_AVAILABLE
 from fx.core.acquisition.aff4 import AFF4Writer, AFF4_AVAILABLE
 from fx.core.acquisition.verify import verify_source_hash
 from fx.core.acquisition.bad_sector_map import BadSectorMap
+from fx.core.acquisition.split_writer import SplitWriter
 from fx.triage.orchestrator import TriageOrchestrator
 
 
@@ -30,39 +31,69 @@ def create_evidence_writer(
     examiner_name: str = "",
     description: str = "",
     notes: str = "",
+    split_size: int = 0,
 ):
     """Factory: create the appropriate evidence writer for *format_type*.
 
+    If *split_size* > 0, the writer is wrapped in a SplitWriter that
+    segments the output into fixed-size parts (.001, .002, …).
+
+    For E01 format, pyewf handles segmentation natively via
+    ``set_maximum_segment_size()`` — SplitWriter is not used.
+
     Raises AcquisitionError if the required library is missing.
     """
-    if format_type == "AFF4":
-        if not AFF4_AVAILABLE:
-            raise AcquisitionError(
-                "AFF4 format selected but pyaff4 is not installed.\n"
-                "Install with: pip install pyaff4"
-            )
-        return AFF4Writer(output_file)
-    elif format_type == "E01":
+
+    # ── E01: native segmentation via pyewf ───────────────────────────
+    if format_type == "E01":
         if not EWF_AVAILABLE:
             raise AcquisitionError(
                 "E01 format selected but pyewf/libewf support is not available.\n"
                 "Install system libewf and the Python bindings (pyewf)."
             )
-        return EwfWriter(
+        writer = EwfWriter(
             output_file,
             case_number=case_number,
             examiner_name=examiner_name,
             description=description,
             notes=notes,
         )
+        # E01 native segment size (pyewf handles .E01, .E02, … automatically)
+        if split_size > 0:
+            try:
+                writer._handle.set_maximum_segment_size(split_size)
+            except (AttributeError, Exception):
+                pass  # older pyewf may not support this; fall through
+        return writer
+
+    # ── Other formats: optional SplitWriter wrapper ──────────────────
+    if format_type == "AFF4":
+        if not AFF4_AVAILABLE:
+            raise AcquisitionError(
+                "AFF4 format selected but pyaff4 is not installed.\n"
+                "Install with: pip install pyaff4"
+            )
+        if split_size > 0:
+            return SplitWriter(output_file, split_size,
+                               writer_factory=lambda p: AFF4Writer(p))
+        return AFF4Writer(output_file)
+
     elif format_type == "RAW+LZ4":
         if not LZ4_AVAILABLE:
             raise AcquisitionError(
                 "RAW+LZ4 format selected but lz4 is not installed.\n"
                 "Install with: pip install lz4>=4.0.0"
             )
+        if split_size > 0:
+            return SplitWriter(output_file, split_size,
+                               writer_factory=lambda p: LZ4Writer(p))
         return LZ4Writer(output_file)
+
     else:
+        # RAW
+        if split_size > 0:
+            return SplitWriter(output_file, split_size,
+                               writer_factory=lambda p: RawWriter(p))
         return RawWriter(output_file)
 
 
@@ -106,6 +137,7 @@ class AcquisitionEngine:
         on_progress: Callable[[dict], None] | None = None,
         description: str = "",
         notes: str = "",
+        split_size: int = 0,
     ):
         self.ip = ip
         self.user = user
@@ -128,6 +160,7 @@ class AcquisitionEngine:
         self.on_progress = on_progress or (lambda d: None)
         self.description = description
         self.notes = notes
+        self.split_size = split_size
 
         self._is_running = True
         self._triage_summary = {}
@@ -332,6 +365,7 @@ class AcquisitionEngine:
             self.format_type, self.output_file,
             case_number=self.case_no, examiner_name=self.examiner,
             description=self.description, notes=self.notes,
+            split_size=self.split_size,
         )
 
         def _safe_close_writer() -> None:
@@ -493,10 +527,14 @@ class AcquisitionEngine:
             # Output image re-verification (FTK "Verify After Create")
             output_sha256 = "SKIPPED"
             output_match = None
-            if self._is_running and self.format_type == "RAW":
+            if self._is_running and self.format_type == "RAW" and self.split_size == 0:
                 self._emit(total_bytes, 0.0, hasher.md5_hex, 0,
                            "Verifying output image (FTK-style)...")
                 output_sha256, output_match = self._verify_output(hasher.sha256_hex)
+
+            # Collect split segment info
+            segment_count = getattr(writer, 'segment_count', 1)
+            segment_paths = getattr(writer, 'segment_paths', [self.output_file])
 
             return {
                 "sha256_final": hasher.sha256_hex,
@@ -511,6 +549,8 @@ class AcquisitionEngine:
                 "error_map_paths": error_map_paths,
                 "output_sha256": output_sha256,
                 "output_match": output_match,
+                "split_segment_count": segment_count,
+                "split_segment_paths": segment_paths,
             }
 
         except AcquisitionError:

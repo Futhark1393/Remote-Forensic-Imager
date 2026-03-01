@@ -919,6 +919,7 @@ class ForensicApp(QMainWindow):
             write_blocker=write_blocker,
             description=e01_description,
             notes=e01_notes,
+            split_size=getattr(self, "_split_size", 0),
         )
         self.worker.progress_signal.connect(self.update_progress_ui)
         self.worker.finished_signal.connect(self.on_acquisition_finished)
@@ -1074,6 +1075,7 @@ class ForensicApp(QMainWindow):
             write_blocker=write_blocker,
             description=e01_description,
             notes=e01_notes,
+            split_size=getattr(self, "_split_size", 0),
         )
         self.worker.progress_signal.connect(self.update_progress_ui)
         self.worker.finished_signal.connect(self.on_acquisition_finished)

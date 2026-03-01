@@ -86,6 +86,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--signing-key", help="Path to Ed25519 private key for audit trail signing")
     p.add_argument("--description", default="", help="E01 header: evidence description (embedded in E01 metadata)")
     p.add_argument("--notes", default="", help="E01 header: examiner notes (embedded in E01 metadata)")
+    p.add_argument("--split-size", default="", help="Split image into segments of this size (e.g., 2G, 4G, 650M). FAT32 safe: 2G")
 
     # Optional — triage
     p.add_argument("--triage", action="store_true", help="Run live triage (network + processes) before acquisition")
@@ -166,6 +167,7 @@ def main() -> int:
         args.siem_cef = wizard.get("siem_cef", False)
         args.description = wizard.get("description", "")
         args.notes = wizard.get("notes", "")
+        args.split_size = wizard.get("split_size", "")
 
     # ── Mode validation ──────────────────────────────────────────────
     # Validate required fields (may have been set by wizard or flags)
@@ -202,6 +204,19 @@ def main() -> int:
     if not os.path.isdir(output_dir):
         print(f"ERROR: Output directory does not exist: {output_dir}", file=sys.stderr)
         return 1
+
+    # ── Parse split size ─────────────────────────────────────────────
+    split_size_bytes = 0
+    if args.split_size:
+        from fx.core.acquisition.split_writer import parse_split_size, format_split_size
+        try:
+            split_size_bytes = parse_split_size(args.split_size)
+            if split_size_bytes < 1024 * 1024:
+                print("ERROR: --split-size must be at least 1M.", file=sys.stderr)
+                return 1
+        except (ValueError, TypeError) as e:
+            print(f"ERROR: Invalid --split-size value: {args.split_size} ({e})", file=sys.stderr)
+            return 1
 
     # ── Optional SIEM / Syslog handler ───────────────────────────────
     syslog_handler = None
@@ -266,6 +281,10 @@ def main() -> int:
         f"{C3}Triage{C0}    {'✓' if (not is_dead and args.triage) else '✗'}{' (N/A for dead)' if is_dead else ''}  {C3}SIEM{C0} {'✓ ' + args.siem_host if args.siem_host else '✗'}",
     ]
 
+    if split_size_bytes > 0:
+        from fx.core.acquisition.split_writer import format_split_size
+        info.append(f"{C3}Split{C0}     {format_split_size(split_size_bytes)} per segment (FAT32 compatible)")
+
     # E01 metadata info (only when E01 format is used)
     if args.format == "E01" and (args.description or args.notes):
         if args.description:
@@ -326,6 +345,7 @@ def main() -> int:
             on_progress=cli_progress,
             description=args.description,
             notes=args.notes,
+            split_size=split_size_bytes,
         )
     else:
         engine = AcquisitionEngine(
@@ -350,6 +370,7 @@ def main() -> int:
             on_progress=cli_progress,
             description=args.description,
             notes=args.notes,
+            split_size=split_size_bytes,
         )
 
     _active_engine = engine
@@ -404,6 +425,20 @@ def main() -> int:
         )
     elif safe_mode:
         print(f"  Bad Sectors  : \033[0;32m✓ None detected\033[0m")
+
+    # ── Split Segment Summary ────────────────────────────────────────
+    segment_count = result.get("split_segment_count", 1)
+    segment_paths = result.get("split_segment_paths", [])
+    if segment_count > 1:
+        from fx.core.acquisition.split_writer import format_split_size
+        print(f"\n  \033[1;36m📦 SPLIT IMAGE: {segment_count} segments\033[0m")
+        print(f"  Segment Size : {format_split_size(split_size_bytes)}")
+        for sp in segment_paths:
+            print(f"    {os.path.basename(sp)}")
+        logger.log(
+            f"Image split into {segment_count} segment(s) ({format_split_size(split_size_bytes)} each)",
+            "INFO", "IMAGE_SPLIT", source_module="cli",
+        )
 
     logger.log("Acquisition completed.", "INFO", "INTEGRITY_LOCAL", source_module="cli", hash_context={
         "local_sha256": sha256,
@@ -494,6 +529,9 @@ def main() -> int:
         "bad_sector_bytes": bad_sector_bytes,
         "bad_sector_summary": bad_sector_summary,
         "error_map_paths": error_map_paths,
+        "split_size": split_size_bytes,
+        "split_segment_count": segment_count,
+        "split_segment_paths": segment_paths,
         "txt_path": txt_path,
         "pdf_path": pdf_path,
     }

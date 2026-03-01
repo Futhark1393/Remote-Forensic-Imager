@@ -43,6 +43,7 @@ class AcquisitionWorker(QThread):
         write_blocker: bool = False,
         description: str = "",
         notes: str = "",
+        split_size: int = 0,
     ):
         super().__init__()
         self._engine = AcquisitionEngine(
@@ -67,6 +68,7 @@ class AcquisitionWorker(QThread):
             on_progress=self._on_progress,
             description=description,
             notes=notes,
+            split_size=split_size,
         )
 
     def _on_progress(self, data: dict) -> None:
@@ -110,6 +112,7 @@ class DeadAcquisitionWorker(QThread):
         write_blocker: bool = False,
         description: str = "",
         notes: str = "",
+        split_size: int = 0,
     ):
         super().__init__()
         self._engine = DeadAcquisitionEngine(
@@ -125,6 +128,7 @@ class DeadAcquisitionWorker(QThread):
             on_progress=self._on_progress,
             description=description,
             notes=notes,
+            split_size=split_size,
         )
 
     def _on_progress(self, data: dict) -> None:

@@ -314,6 +314,29 @@ def run_interactive_wizard() -> dict:
             hint="e.g., Seized under warrant #12345",
         )
 
+    # Split image
+    params["split_size"] = ""
+    if _prompt_bool("Split image into segments?", default=False,
+                    hint="useful for FAT32 / DVD / transport"):
+        split_choice = _prompt_choice(
+            "Segment size:",
+            ["650M (CD)", "2G (FAT32)", "4G (DVD-DL)", "Custom"],
+            default="2G (FAT32)",
+            hint="choose a preset or enter a custom size",
+        )
+        _split_map = {
+            "650M (CD)": "650M",
+            "2G (FAT32)": "2G",
+            "4G (DVD-DL)": "4G",
+        }
+        if split_choice == "Custom":
+            params["split_size"] = _prompt(
+                "Custom segment size",
+                hint="e.g., 500M, 1G, 3500M — minimum 1M",
+            )
+        else:
+            params["split_size"] = _split_map[split_choice]
+
     # ── 5. Acquisition Options ───────────────────────────────────────
     _section("Acquisition Options", 5)
     params["safe_mode"] = _prompt_bool(
@@ -423,6 +446,7 @@ def _print_summary(p: dict) -> None:
         ("Examiner",       p["examiner"]),
         ("Output",         p["output_dir"]),
         ("Format",         p["format"]),
+        ("Split Size",     p["split_size"] if p.get("split_size") else "None"),
         ("Safe Mode",      "✓" if p["safe_mode"] else "✗"),
         ("Verify Hash",    "✓" if p["verify"] else "✗"),
         ("Write-Blocker",  "✓" if p["write_blocker"] else "✗"),
@@ -458,6 +482,9 @@ def _print_equivalent_command(p: dict) -> None:
     parts.append(f"--examiner \"{p['examiner']}\"")
     parts.append(f"--output-dir {p['output_dir']}")
     parts.append(f"--format {p['format']}")
+
+    if p.get("split_size"):
+        parts.append(f"--split-size {p['split_size']}")
 
     if p["verify"]:
         parts.append("--verify")
