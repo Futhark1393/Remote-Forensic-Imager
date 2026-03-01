@@ -219,6 +219,10 @@ class ForensicApp(QMainWindow):
         if hasattr(self, "cmb_format"):
             self.cmb_format.currentIndexChanged.connect(self._on_format_changed)
 
+        # Split image: enable/disable combo when checkbox toggled
+        if hasattr(self, "chk_split"):
+            self.chk_split.toggled.connect(self._on_split_toggled)
+
         # Open Dashboard button (if exists)
         if hasattr(self, "btn_open_dashboard"):
             self.btn_open_dashboard.clicked.connect(self.open_dashboard)
@@ -499,6 +503,26 @@ class ForensicApp(QMainWindow):
         if hasattr(self, "groupBox_e01_metadata"):
             self.groupBox_e01_metadata.setEnabled(is_e01)
 
+    def _on_split_toggled(self, checked: bool) -> None:
+        """Enable split size combo when checkbox is toggled."""
+        if hasattr(self, "cmb_split_size"):
+            self.cmb_split_size.setEnabled(checked)
+
+    def _get_split_size_bytes(self) -> int:
+        """Read split size from GUI widgets. Returns 0 if disabled."""
+        if not (hasattr(self, "chk_split") and self.chk_split.isChecked()):
+            return 0
+        raw = self.cmb_split_size.currentText().strip() if hasattr(self, "cmb_split_size") else ""
+        if not raw:
+            return 0
+        # Strip parenthesized hint  e.g. "2G (FAT32)" → "2G"
+        token = raw.split("(")[0].strip().split()[0]
+        try:
+            from fx.core.acquisition.split_writer import parse_split_size
+            return parse_split_size(token)
+        except (ValueError, KeyError):
+            return 0
+
     # ── File pickers ─────────────────────────────────────────────────
 
     def select_key(self):
@@ -765,6 +789,9 @@ class ForensicApp(QMainWindow):
         format_label = self.cmb_format.currentText() if hasattr(self, "cmb_format") else "RAW (.raw)"
         self.format_type = _FORMAT_MAP.get(format_label, "RAW")
 
+        # Split image
+        self._split_size = self._get_split_size_bytes()
+
         throttle_limit = 0.0
         if hasattr(self, "chk_throttle") and self.chk_throttle.isChecked():
             try:
@@ -893,6 +920,11 @@ class ForensicApp(QMainWindow):
             e01_notes_preview = e01_notes[:60] if e01_notes else "(empty)"
             self.log(f"E01 Header → Description: {e01_desc_preview} | Notes: {e01_notes_preview}", "INFO", "E01_METADATA")
 
+        # Log split image setting
+        if self._split_size > 0:
+            from fx.core.acquisition.split_writer import format_split_size
+            self.log(f"Split Image → {format_split_size(self._split_size)} per segment", "INFO", "SPLIT_IMAGE")
+
         # ── Launch worker ─────────────────────────────────────────────
         # E01 metadata (description + notes)
         e01_description = self.txt_e01_description.text().strip() if hasattr(self, "txt_e01_description") else ""
@@ -953,6 +985,9 @@ class ForensicApp(QMainWindow):
         # ── Read shared options ──────────────────────────────────────
         format_label = self.cmb_format.currentText() if hasattr(self, "cmb_format") else "RAW (.raw)"
         self.format_type = _FORMAT_MAP.get(format_label, "RAW")
+
+        # Split image
+        self._split_size = self._get_split_size_bytes()
 
         throttle_limit = 0.0
         if hasattr(self, "chk_throttle") and self.chk_throttle.isChecked():
@@ -1062,6 +1097,11 @@ class ForensicApp(QMainWindow):
             e01_desc_preview = e01_description[:60] if e01_description else "(empty)"
             e01_notes_preview = e01_notes[:60] if e01_notes else "(empty)"
             self.log(f"E01 Header → Description: {e01_desc_preview} | Notes: {e01_notes_preview}", "INFO", "E01_METADATA")
+
+        # Log split image setting
+        if self._split_size > 0:
+            from fx.core.acquisition.split_writer import format_split_size
+            self.log(f"Split Image → {format_split_size(self._split_size)} per segment", "INFO", "SPLIT_IMAGE")
 
         self.worker = DeadAcquisitionWorker(
             source_path=source_path,
