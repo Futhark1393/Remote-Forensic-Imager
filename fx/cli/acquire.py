@@ -57,6 +57,10 @@ def parse_args() -> argparse.Namespace:
         description="ForenXtract (FX) — headless CLI acquisition (live & dead modes).",
     )
 
+    # Interactive wizard mode
+    p.add_argument("-i", "--interactive", action="store_true",
+                   help="Launch interactive step-by-step wizard (no flags needed)")
+
     # Mode
     p.add_argument("--dead", action="store_true", help="Dead (local) acquisition mode — image a locally attached device")
     p.add_argument("--source", help="Source device or folder for dead acquisition (e.g., /dev/sdb, /mnt/evidence/)")
@@ -67,10 +71,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--key", help="Path to SSH private key .pem (live mode)")
     p.add_argument("--disk", help="Target block device on remote host (live mode, e.g., /dev/sda)")
 
-    # Shared required
-    p.add_argument("--output-dir", required=True, help="Evidence output directory")
-    p.add_argument("--case", required=True, help="Case number")
-    p.add_argument("--examiner", required=True, help="Examiner name")
+    # Shared required (optional when --interactive is used)
+    p.add_argument("--output-dir", required=False, help="Evidence output directory")
+    p.add_argument("--case", required=False, help="Case number")
+    p.add_argument("--examiner", required=False, help="Examiner name")
 
     # Optional — acquisition
     p.add_argument("--format", choices=["RAW", "RAW+LZ4", "E01", "AFF4"], default="RAW", help="Evidence format (default: RAW)")
@@ -122,7 +126,52 @@ def cli_progress(data: dict) -> None:
 def main() -> int:
     args = parse_args()
 
+    # ── Interactive wizard mode ───────────────────────────────────────
+    # If --interactive or no meaningful arguments provided, launch wizard
+    _has_args = any([
+        args.dead, args.source, args.ip, args.user, args.key, args.disk,
+        # output_dir and case/examiner are required in argparse,
+        # so we check if interactive was explicitly set
+    ])
+
+    if args.interactive:
+        from fx.cli.interactive import run_interactive_wizard
+        wizard = run_interactive_wizard()
+        # Map wizard results back to args namespace
+        args.dead = wizard["dead"]
+        args.source = wizard.get("source")
+        args.ip = wizard.get("ip")
+        args.user = wizard.get("user")
+        args.key = wizard.get("key")
+        args.disk = wizard.get("disk")
+        args.case = wizard["case"]
+        args.examiner = wizard["examiner"]
+        args.output_dir = wizard["output_dir"]
+        args.format = wizard["format"]
+        args.verify = wizard.get("verify", False)
+        args.no_safe_mode = not wizard.get("safe_mode", True)
+        args.write_blocker = wizard.get("write_blocker", False)
+        args.throttle = wizard.get("throttle", 0.0)
+        args.triage = wizard.get("triage", False)
+        args.no_triage_network = not wizard.get("triage_network", True)
+        args.no_triage_processes = not wizard.get("triage_processes", True)
+        args.triage_memory = wizard.get("triage_memory", False)
+        args.no_hash_exes = wizard.get("no_hash_exes", False)
+        args.signing_key = wizard.get("signing_key", "")
+        args.siem_host = wizard.get("siem_host", "")
+        args.siem_port = wizard.get("siem_port", 514)
+        args.siem_protocol = wizard.get("siem_protocol", "UDP")
+        args.siem_cef = wizard.get("siem_cef", False)
+        args.description = wizard.get("description", "")
+        args.notes = wizard.get("notes", "")
+
     # ── Mode validation ──────────────────────────────────────────────
+    # Validate required fields (may have been set by wizard or flags)
+    for field in ("output_dir", "case", "examiner"):
+        if not getattr(args, field, None):
+            print(f"ERROR: --{field.replace('_', '-')} is required (or use --interactive / -i).", file=sys.stderr)
+            return 1
+
     is_dead = args.dead
 
     if is_dead:

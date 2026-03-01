@@ -25,10 +25,11 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QFormLayout,
+    QToolTip,
 )
 from PyQt6.uic import loadUi
-from PyQt6.QtGui import QTextCursor, QKeySequence, QShortcut
-from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QTextCursor, QKeySequence, QShortcut, QColor, QPalette
+from PyQt6.QtCore import Qt, QTimer
 
 from fx.deps.dependency_checker import run_dependency_check
 from fx.audit.logger import ForensicLogger, ForensicLoggerError
@@ -231,9 +232,178 @@ class ForensicApp(QMainWindow):
         if hasattr(self, "chk_siem"):
             self.chk_siem.toggled.connect(self._on_siem_toggled)
 
+        # Tab switch → update readiness hint
+        if hasattr(self, "tabWidget"):
+            self.tabWidget.currentChanged.connect(lambda _: self._update_readiness_hint())
+
         # F5 shortcut for session reset
         self.f5_shortcut = QShortcut(QKeySequence("F5"), self)
         self.f5_shortcut.activated.connect(self.reset_session)
+
+        # F1 shortcut — show keyboard shortcuts help
+        self.f1_shortcut = QShortcut(QKeySequence("F1"), self)
+        self.f1_shortcut.activated.connect(self.show_shortcuts_help)
+
+        # Ctrl+Q shortcut — quit
+        self.quit_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
+        self.quit_shortcut.activated.connect(self.close)
+
+        # Help button (if added from .ui)
+        if hasattr(self, "btn_help"):
+            self.btn_help.clicked.connect(self.show_shortcuts_help)
+
+        # ── Real-time input validation ────────────────────────────
+        self._setup_realtime_validation()
+
+    # ── Real-time Validation ──────────────────────────────────────────
+
+    _VALID_STYLE = "border: 1px solid #4caf50;"    # green border
+    _INVALID_STYLE = "border: 1px solid #f44336;"  # red border
+    _NEUTRAL_STYLE = ""                             # default
+
+    def _setup_realtime_validation(self):
+        """Connect text fields to live validators with debounce."""
+        self._validation_timer = QTimer(self)
+        self._validation_timer.setSingleShot(True)
+        self._validation_timer.setInterval(400)  # 400ms debounce
+        self._validation_timer.timeout.connect(self._run_validation)
+
+        # IP field
+        if hasattr(self, "txt_ip"):
+            self.txt_ip.textChanged.connect(lambda: self._validation_timer.start())
+            self.txt_ip.setPlaceholderText("e.g., 10.0.0.1 — validates live")
+
+        # Username field
+        if hasattr(self, "txt_user"):
+            self.txt_user.textChanged.connect(lambda: self._validation_timer.start())
+
+        # SSH key field
+        if hasattr(self, "txt_key"):
+            self.txt_key.textChanged.connect(lambda: self._validation_timer.start())
+
+        # SIEM host
+        if hasattr(self, "txt_siem_host"):
+            self.txt_siem_host.textChanged.connect(lambda: self._validation_timer.start())
+
+        # SIEM port
+        if hasattr(self, "txt_siem_port"):
+            self.txt_siem_port.textChanged.connect(lambda: self._validation_timer.start())
+
+        # Signing key
+        if hasattr(self, "txt_signing_key"):
+            self.txt_signing_key.textChanged.connect(lambda: self._validation_timer.start())
+
+    def _run_validation(self):
+        """Validate all input fields and update border colors."""
+        # IP
+        if hasattr(self, "txt_ip"):
+            ip = self.txt_ip.text().strip()
+            if not ip:
+                self.txt_ip.setStyleSheet(self._NEUTRAL_STYLE)
+            else:
+                ok, _ = validate_target_address(ip)
+                self.txt_ip.setStyleSheet(self._VALID_STYLE if ok else self._INVALID_STYLE)
+
+        # Username
+        if hasattr(self, "txt_user"):
+            user = self.txt_user.text().strip()
+            if not user:
+                self.txt_user.setStyleSheet(self._NEUTRAL_STYLE)
+            else:
+                ok, _ = validate_ssh_username(user)
+                self.txt_user.setStyleSheet(self._VALID_STYLE if ok else self._INVALID_STYLE)
+
+        # SSH key file
+        if hasattr(self, "txt_key"):
+            key = self.txt_key.text().strip()
+            if not key:
+                self.txt_key.setStyleSheet(self._NEUTRAL_STYLE)
+            elif os.path.isfile(key):
+                self.txt_key.setStyleSheet(self._VALID_STYLE)
+            else:
+                self.txt_key.setStyleSheet(self._INVALID_STYLE)
+
+        # Signing key
+        if hasattr(self, "txt_signing_key"):
+            sk = self.txt_signing_key.text().strip()
+            if not sk:
+                self.txt_signing_key.setStyleSheet(self._NEUTRAL_STYLE)
+            else:
+                ok, _ = validate_signing_key(sk)
+                self.txt_signing_key.setStyleSheet(self._VALID_STYLE if ok else self._INVALID_STYLE)
+
+        # SIEM host (basic: non-empty when SIEM is enabled)
+        if hasattr(self, "txt_siem_host") and hasattr(self, "chk_siem"):
+            if self.chk_siem.isChecked():
+                host = self.txt_siem_host.text().strip()
+                if not host:
+                    self.txt_siem_host.setStyleSheet(self._INVALID_STYLE)
+                else:
+                    self.txt_siem_host.setStyleSheet(self._VALID_STYLE)
+
+        # SIEM port
+        if hasattr(self, "txt_siem_port") and hasattr(self, "chk_siem"):
+            if self.chk_siem.isChecked():
+                port_str = self.txt_siem_port.text().strip()
+                try:
+                    port = int(port_str) if port_str else 0
+                    ok = 1 <= port <= 65535
+                except ValueError:
+                    ok = False
+                self.txt_siem_port.setStyleSheet(self._VALID_STYLE if ok else self._INVALID_STYLE)
+
+        # Update status bar with readiness hint
+        self._update_readiness_hint()
+
+    def _update_readiness_hint(self):
+        """Show a quick readiness status in the status bar."""
+        tab_index = self.tabWidget.currentIndex() if hasattr(self, "tabWidget") else 0
+
+        issues = []
+        if tab_index == 0:  # Live
+            if hasattr(self, "txt_ip") and not self.txt_ip.text().strip():
+                issues.append("Target IP")
+            if hasattr(self, "txt_key") and not self.txt_key.text().strip():
+                issues.append("SSH Key")
+            if hasattr(self, "cmb_disk") and not self.cmb_disk.currentText().strip():
+                issues.append("Target Disk")
+        else:  # Dead
+            has_device = hasattr(self, "cmb_dead_disk") and self.cmb_dead_disk.currentText().strip()
+            has_folder = hasattr(self, "txt_dead_image") and self.txt_dead_image.text().strip()
+            if not has_device and not has_folder:
+                issues.append("Source Device/Folder")
+
+        if issues:
+            missing = ", ".join(issues)
+            self.statusBar().showMessage(f"Missing: {missing}  |  F1: Shortcuts  |  F5: Reset Session")
+        else:
+            self.statusBar().showMessage("Ready to acquire  |  F1: Shortcuts  |  F5: Reset Session")
+
+    def show_shortcuts_help(self):
+        """Show a dialog with available keyboard shortcuts and tips."""
+        help_text = (
+            "<h3>Keyboard Shortcuts</h3>"
+            "<table cellpadding='4'>"
+            "<tr><td><b>F1</b></td><td>Show this help</td></tr>"
+            "<tr><td><b>F5</b></td><td>Reset session for new acquisition</td></tr>"
+            "<tr><td><b>Ctrl+Q</b></td><td>Quit application</td></tr>"
+            "</table>"
+            "<br>"
+            "<h3>Quick Tips</h3>"
+            "<ul>"
+            "<li>Input fields turn <span style='color:#4caf50'>green</span> when valid, "
+            "<span style='color:#f44336'>red</span> when invalid.</li>"
+            "<li>The status bar shows which fields still need to be filled.</li>"
+            "<li><b>Auto-Detect (lsblk)</b> button discovers disks automatically.</li>"
+            "<li>Safe Mode + Verify conflict is detected before acquisition starts.</li>"
+            "<li>After acquisition, use <b>Open Dashboard</b> to view triage results.</li>"
+            "</ul>"
+            "<br>"
+            "<h3>CLI Interactive Mode</h3>"
+            "<p>Run <code>fx-acquire -i</code> or <code>fx-acquire --interactive</code> "
+            "for a guided step-by-step wizard in the terminal — no flags needed!</p>"
+        )
+        QMessageBox.information(self, "ForenXtract — Help & Shortcuts", help_text)
 
     def setup_defaults(self):
         if hasattr(self, "txt_caseno"):
@@ -279,6 +449,9 @@ class ForensicApp(QMainWindow):
         self.log(f"[*] Session ID: {self.logger.session_id}", "INFO", "SYSTEM_BOOT")
         self.log(f"[*] Case Bound: {self.case_no} | Examiner: {self.examiner}", "INFO", "CONTEXT_UPDATED")
         self.log(f"[*] Evidence Directory: {self.output_dir}", "INFO", "CONTEXT_UPDATED")
+        self.log("[*] Press F1 for keyboard shortcuts & tips.", "INFO", "SYSTEM_BOOT")
+        # Show initial readiness hint
+        QTimer.singleShot(100, self._update_readiness_hint)
 
     def setup_tooltips(self):
         if hasattr(self, "chk_writeblock"):

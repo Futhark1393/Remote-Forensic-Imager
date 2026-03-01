@@ -613,6 +613,32 @@
        <item>
         <widget class="QTextEdit" name="txt_log"/>
        </item>
+       <item>
+        <layout class="QHBoxLayout" name="hLayout_console_actions">
+         <property name="spacing"><number>8</number></property>
+         <item>
+          <widget class="QPushButton" name="btn_open_dashboard">
+           <property name="text"><string>Open Triage Dashboard</string></property>
+           <property name="enabled"><bool>false</bool></property>
+           <property name="minimumSize"><size><width>0</width><height>32</height></size></property>
+           <property name="toolTip"><string>Open the generated triage dashboard in your browser</string></property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="hSpacer_console">
+           <property name="orientation"><enum>Qt::Horizontal</enum></property>
+           <property name="sizeHint"><size><width>40</width><height>20</height></size></property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_help">
+           <property name="text"><string>Help (F1)</string></property>
+           <property name="minimumSize"><size><width>0</width><height>32</height></size></property>
+           <property name="toolTip"><string>Show keyboard shortcuts and tips</string></property>
+          </widget>
+         </item>
+        </layout>
+       </item>
       </layout>
      </widget>
     </item>
