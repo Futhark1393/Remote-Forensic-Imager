@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/Futhark1393/ForenXtract/actions/workflows/python-ci.yml/badge.svg)
 
-**Author:** Kemal Sebzeci · **Version:** 3.7.0 · **License:** Apache-2.0
+**Author:** Kemal Sebzeci · **Version:** 3.8.0 · **License:** Apache-2.0
 
 ForenXtract (FX) is a **case-first forensic disk acquisition framework** built with **Python + PyQt6**. It supports both **Live (Remote/SSH)** and **Dead (Local)** acquisition through a tabbed GUI and a fully headless CLI.
 
@@ -10,6 +10,7 @@ ForenXtract (FX) is a **case-first forensic disk acquisition framework** built w
 - Explicit **session state machine** enforcing forensic workflow ordering
 - **Tamper-evident JSONL audit trail** with cryptographic hash chaining + optional Ed25519 signing
 - **Interactive CLI wizard** (`fx-acquire -i`) — step-by-step guided acquisition, no flags to memorize
+- **DDSecure-style bad sector error map** — granular offset list of unreadable sectors (text log + JSON + ddrescue mapfile)
 - **Real-time input validation** in GUI with visual feedback
 - Four output formats: **RAW**, **RAW+LZ4**, **E01**, **AFF4**
 - Live triage (network, processes, memory) with **interactive HTML dashboard**
@@ -25,6 +26,7 @@ ForenXtract (FX) is a **case-first forensic disk acquisition framework** built w
 - [CLI Reference](#cli-reference)
 - [Core Capabilities](#core-capabilities)
 - [Evidence Formats](#evidence-formats)
+- [Bad Sector Error Map](#bad-sector-error-map)
 - [Live Triage & Dashboard](#live-triage--dashboard)
 - [Architecture](#architecture)
 - [Output Artifacts](#output-artifacts)
@@ -365,7 +367,8 @@ NEW → CONTEXT_BOUND → ACQUIRING → VERIFYING → SEALED → DONE
 ## Acquisition & Integrity
 
 - SSH-based remote acquisition (live) or direct block-device / directory reading (dead)
-- **Bad sector error map** — unreadable sectors logged with offset/length/error, saved as `.error_map.json`
+- **DDSecure-style bad sector error map** — granular retry (4 MB → 64 KB → 4 KB → 512 B) to pinpoint exact unreadable offsets; exports as text log, JSON, and ddrescue-compatible mapfile
+- **Real-time bad sector counter** in CLI progress bar (`BAD:N` indicator)
 - **Output re-verification** — written image SHA-256 compared to stream hash (FTK Imager-style)
 - On-the-fly dual hashing (MD5 + SHA-256)
 - Safe Mode (`conv=noerror,sync`), software write-blocker, throttling
@@ -394,6 +397,67 @@ Hash is computed on **raw disk data before compression**, ensuring evidence inte
 > Source hash will **never** match if Safe Mode encountered bad sectors.
 >
 > **FX detects this conflict** — both GUI and interactive CLI wizard warn you and offer to disable one.
+
+---
+
+# Bad Sector Error Map
+
+When Safe Mode is enabled, FX handles unreadable sectors with a **DDSecure-style granular retry** strategy:
+
+1. A 4 MB chunk fails to read
+2. FX retries with **512-byte blocks** to pinpoint the exact bad offsets
+3. Each sub-block gets up to 3 retry attempts before being zero-padded
+4. Every unreadable region is recorded with its exact byte offset and length
+
+### Export Formats
+
+| Format | File | Description |
+|--------|------|-------------|
+| **Text Log** | `*.bad_sectors.log` | Human-readable DDSecure-style offset table |
+| **JSON** | `*.bad_sectors.json` | Machine-readable with full metadata |
+| **ddrescue Map** | `*.bad_sectors.mapfile` | GNU ddrescue-compatible mapfile |
+
+### Text Log Example (DDSecure-style)
+
+~~~text
+# ForenXtract — Bad Sector Error Map (DDSecure-style)
+# Source    : /dev/sda
+# Total bad regions  : 4
+# Total bad bytes    : 7,680
+# Total bad sectors  : 15 (512-byte)
+
+OFFSET (hex)          OFFSET (dec)        END OFFSET (hex)      LENGTH        SECTORS(512)  RETRIES   ERROR
+----------------------------------------------------------------------------------------------------------------------------------
+0x0000000000000000    0                   0x0000000000000200    512           1             3         Input/output error
+0x0000000004000000    67108864            0x0000000004001000    4096          8             3         EIO: I/O error
+0x0000000008001000    134221824           0x0000000008001400    1024          2             2         Input/output error
+0x0000000010000000    268435456           0x0000000010000800    2048          4             1         Read fault
+~~~
+
+### CLI Progress
+
+Bad sectors are visible **in real-time** during acquisition:
+
+~~~text
+  [██████████████░░░░░░░░░░░░░░░░]  45% | 500 MB | 120.5 MB/s | ETA: 00:15:32 | BAD:3
+~~~
+
+After acquisition completes:
+
+~~~text
+  ⚠ BAD SECTORS DETECTED
+  Bad Regions  : 4
+  Bad Bytes    : 7,680
+  Summary      : 4 bad region(s) — 7,680 bytes (15 sector(s) @ 512B) unreadable, zero-padded in output image.
+  Error Map Files:
+    Text Log   : /evidence/evidence_2026-001_20260301.raw.bad_sectors.log
+    JSON Map   : /evidence/evidence_2026-001_20260301.raw.bad_sectors.json
+    ddrescue   : /evidence/evidence_2026-001_20260301.raw.bad_sectors.mapfile
+~~~
+
+The ddrescue mapfile can be fed directly into GNU ddrescue for targeted re-imaging of only the bad regions.
+
+---
 
 ## Signing Keypair
 
@@ -463,7 +527,8 @@ fx/
 │   ├── validation.py           # Shared validators (IP, SIEM, signing key)
 │   └── acquisition/
 │       ├── base.py             # AcquisitionEngine + evidence writer factory
-│       ├── dead.py             # DeadAcquisitionEngine (bad sector map, re-verify)
+│       ├── dead.py             # DeadAcquisitionEngine (granular bad sector retry, re-verify)
+│       ├── bad_sector_map.py   # DDSecure-style error map (text log + JSON + ddrescue mapfile)
 │       ├── raw.py              # RawWriter (with fsync)
 │       ├── ewf.py              # EwfWriter (with E01 metadata)
 │       ├── lz4_writer.py       # LZ4Writer
@@ -488,7 +553,9 @@ fx/
 | File | Description |
 |------|-------------|
 | `evidence_<CASE>_<UTC>.*` | Disk image (`.raw` / `.raw.lz4` / `.E01` / `.aff4`) |
-| `*.error_map.json` | Bad sector error map (if any unreadable sectors) |
+| `*.bad_sectors.log` | Bad sector error map — DDSecure-style text offset table |
+| `*.bad_sectors.json` | Bad sector error map — machine-readable JSON |
+| `*.bad_sectors.mapfile` | Bad sector error map — GNU ddrescue-compatible mapfile |
 | `AuditTrail_<CASE>_<SESSION>.jsonl` | Tamper-evident audit log |
 | `AuditTrail_<CASE>_<SESSION>.jsonl.sig` | Ed25519 detached signature |
 | `Report_<CASE>_<UTC>.pdf` / `.txt` | Forensic reports |
@@ -505,13 +572,13 @@ fx/
 python -m pytest tests/ -v
 ~~~
 
-**158 unit tests** across 3 modules — all optional-dependency tests use `unittest.mock.patch` (zero skips regardless of installed packages):
+**163 unit tests** across 3 modules — all optional-dependency tests use `unittest.mock.patch` (zero skips regardless of installed packages):
 
 | Module | Tests | Coverage |
 |--------|------:|----------|
 | `test_core.py` | 78 | Session state machine, StreamHasher, writers (RAW/LZ4/EWF/AFF4), dd builder, validators, audit chain, logger, signing, syslog, reports |
 | `test_triage.py` | 23 | All collectors (processes, network, memory), orchestrator, error isolation |
-| `test_acquisition.py` | 57 | SSH, write-blocker, verification, live/dead engines, directory acquisition, pkexec elevation, format writers, injection prevention |
+| `test_acquisition.py` | 62 | SSH, write-blocker, verification, live/dead engines, directory acquisition, pkexec elevation, format writers, injection prevention, bad sector map |
 
 ![Tests](screenshots/cli_tests.png)
 

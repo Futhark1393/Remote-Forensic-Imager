@@ -1,6 +1,6 @@
 [project]
 name = "forenxtract"
-version = "3.7.0"
+version = "3.8.0"
 description = "ForenXtract (FX) — case-first forensic acquisition tool (live & dead) with structured audit logging and report generation"
 authors = [{ name = "Kemal Sebzeci" }]
 readme = "README.md"

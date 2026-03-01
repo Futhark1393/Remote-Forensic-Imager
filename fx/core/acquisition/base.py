@@ -18,6 +18,7 @@ from fx.core.acquisition.lz4_writer import LZ4Writer, LZ4_AVAILABLE
 from fx.core.acquisition.ewf import EwfWriter, EWF_AVAILABLE
 from fx.core.acquisition.aff4 import AFF4Writer, AFF4_AVAILABLE
 from fx.core.acquisition.verify import verify_source_hash
+from fx.core.acquisition.bad_sector_map import BadSectorMap
 from fx.triage.orchestrator import TriageOrchestrator
 
 
@@ -131,6 +132,12 @@ class AcquisitionEngine:
         self._is_running = True
         self._triage_summary = {}
         self._active_ssh = None
+        # Bad sector error map (DDSecure-style)
+        self._bad_sector_map = BadSectorMap(
+            source=f"{ip}:{disk}",
+            output=output_file,
+            chunk_size=self.CHUNK_SIZE,
+        )
 
     def stop(self) -> None:
         """Request a graceful stop of the acquisition loop."""
@@ -157,6 +164,8 @@ class AcquisitionEngine:
             "md5_current": md5,
             "percentage": min(100, pct),
             "eta": eta,
+            "bad_sector_count": self._bad_sector_map.count,
+            "bad_sector_bytes": self._bad_sector_map.total_bad_bytes,
         })
 
     # ── Output image verification (FTK Imager-style) ────────────────────
@@ -211,6 +220,74 @@ class AcquisitionEngine:
         })
 
     # ── Triage ──────────────────────────────────────────────────────────
+
+    def _parse_dd_stderr(self, stderr_text: str, target_bytes: int) -> None:
+        """Parse dd stderr output for I/O error lines (conv=noerror,sync mode).
+
+        When dd runs with ``conv=noerror,sync``, it logs error lines like::
+
+            dd: error reading '/dev/sda': Input/output error
+            1234+0 records in    (records summary)
+
+        We also look for summary lines to infer the number of error records.
+        Since dd with conv=noerror replaces unreadable blocks with zeros,
+        exact offsets are approximated from record numbers where available.
+        """
+        import re
+        lines = stderr_text.splitlines()
+
+        # Pattern: "dd: error reading '...': <error message>"
+        error_pattern = re.compile(
+            r"dd:\s*error\s+reading\s+'[^']*':\s*(.+)", re.IGNORECASE
+        )
+
+        # Pattern: "N+M records in" — M is the number of error records
+        records_pattern = re.compile(
+            r"(\d+)\+(\d+)\s+records\s+in", re.IGNORECASE
+        )
+
+        error_messages = []
+        error_record_count = 0
+
+        for line in lines:
+            m = error_pattern.search(line)
+            if m:
+                error_messages.append(m.group(1).strip())
+
+            m = records_pattern.search(line)
+            if m:
+                error_record_count = int(m.group(2))
+
+        # If dd reported error records in its summary
+        if error_record_count > 0 and not error_messages:
+            error_messages = [f"dd reported {error_record_count} error record(s)"]
+
+        # Record each detected error. Without exact offsets from dd,
+        # we record them as best-effort entries. dd conv=noerror,sync
+        # uses the block size (bs=) for each error record.
+        for i, err_msg in enumerate(error_messages):
+            # Offset is unknown for remote dd; use sentinel -1 or estimate
+            # We record at least the count and error description
+            self._bad_sector_map.record(
+                offset=-1,   # unknown exact offset (remote dd)
+                length=self.CHUNK_SIZE,
+                error=err_msg,
+                retry_count=0,
+            )
+
+        # If we got a summary count but fewer individual error lines,
+        # fill in the remainder
+        if error_record_count > len(error_messages):
+            remaining = error_record_count - len(error_messages)
+            for _ in range(remaining):
+                self._bad_sector_map.record(
+                    offset=-1,
+                    length=self.CHUNK_SIZE,
+                    error="I/O error (from dd summary)",
+                    retry_count=0,
+                )
+
+    # ── Run Triage ──────────────────────────────────────────────────────
 
     def _run_triage(self, ssh: paramiko.SSHClient) -> None:
         if not (self.run_triage and self.output_dir):
@@ -344,10 +421,17 @@ class AcquisitionEngine:
 
                         self._emit(total_bytes, mb_per_sec, hasher.md5_hex, pct, eta_str)
 
-                    # Check dd exit status
+                    # Check dd exit status and parse stderr for bad sector info
                     exit_status = stdout_ch.channel.recv_exit_status()
-                    if exit_status != 0 and self._is_running:
-                        err_text = stderr_ch.read().decode("utf-8", errors="ignore").strip()
+                    err_text = stderr_ch.read().decode("utf-8", errors="ignore").strip()
+
+                    # Parse dd stderr for I/O error lines (conv=noerror,sync)
+                    # dd outputs lines like: "dd: error reading '/dev/sda': Input/output error"
+                    # and summary: "X+Y records in" where Y > 0 means error records
+                    if err_text and self.safe_mode:
+                        self._parse_dd_stderr(err_text, target_bytes)
+
+                    if exit_status != 0 and self._is_running and not self.safe_mode:
                         raise AcquisitionError(f"dd failed: {err_text}")
 
                     if success or not self._is_running:
@@ -395,6 +479,17 @@ class AcquisitionEngine:
             if not success:
                 raise AcquisitionError("Acquisition did not complete successfully.")
 
+            # Write DDSecure-style bad-sector error map if any errors detected
+            error_map_paths = {}
+            if self._bad_sector_map.has_errors():
+                self._bad_sector_map.coalesce()
+                try:
+                    error_map_paths = self._bad_sector_map.export_all(
+                        self.output_file, device_size=target_bytes,
+                    )
+                except OSError:
+                    pass
+
             # Output image re-verification (FTK "Verify After Create")
             output_sha256 = "SKIPPED"
             output_match = None
@@ -410,6 +505,10 @@ class AcquisitionEngine:
                 "remote_sha256": remote_sha256,
                 "hash_match": hash_match,
                 "triage_summary": self._triage_summary,
+                "bad_sectors": self._bad_sector_map.count,
+                "bad_sector_bytes": self._bad_sector_map.total_bad_bytes,
+                "bad_sector_summary": self._bad_sector_map.summary(),
+                "error_map_paths": error_map_paths,
                 "output_sha256": output_sha256,
                 "output_match": output_match,
             }

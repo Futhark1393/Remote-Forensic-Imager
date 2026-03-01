@@ -15,6 +15,7 @@ from fx.core.acquisition.raw import RawWriter
 from fx.core.acquisition.lz4_writer import LZ4Writer, LZ4_AVAILABLE
 from fx.core.acquisition.ewf import EwfWriter, EWF_AVAILABLE
 from fx.core.acquisition.aff4 import AFF4Writer, AFF4_AVAILABLE
+from fx.core.acquisition.bad_sector_map import BadSectorMap
 
 
 class DeadAcquisitionError(Exception):
@@ -142,7 +143,13 @@ class DeadAcquisitionEngine:
 
         self._is_running = True
         self._elevated_proc: subprocess.Popen | None = None
-        # Bad sector error map (ddrescue-style)
+        # Bad sector error map (DDSecure / ddrescue-style)
+        self._bad_sector_map = BadSectorMap(
+            source=source_path,
+            output=output_file,
+            chunk_size=self.CHUNK_SIZE,
+        )
+        # Legacy compatibility
         self._bad_sectors: list[dict] = []
 
     def stop(self) -> None:
@@ -168,6 +175,8 @@ class DeadAcquisitionEngine:
             "md5_current": md5,
             "percentage": min(100, pct),
             "eta": eta,
+            "bad_sector_count": self._bad_sector_map.count,
+            "bad_sector_bytes": self._bad_sector_map.total_bad_bytes,
         })
 
     # ── Writer factory ──────────────────────────────────────────────
@@ -325,6 +334,121 @@ class DeadAcquisitionEngine:
         except Exception:
             pass
 
+    # ── DDSecure-style granular bad sector retry ────────────────────
+
+    # Retry granularity levels: 4 MB → 64 KB → 4 KB → 512 B
+    _RETRY_BLOCK_SIZES = [64 * 1024, 4096, 512]
+
+    def _read_with_granular_retry(
+        self,
+        src,
+        chunk_offset: int,
+        chunk_length: int,
+        original_error: str,
+    ) -> bytes:
+        """Read a failed chunk using progressively smaller block sizes.
+
+        DDSecure-style: when a large read fails, subdivide the region into
+        smaller blocks and retry each one.  Successfully read sub-blocks are
+        kept; still-unreadable sub-blocks are zero-padded and recorded in
+        the bad sector map with their *exact* offset and length.
+
+        Returns a bytes object of exactly *chunk_length* bytes.
+        """
+        result = bytearray()
+        sub_offset = chunk_offset
+        remaining = chunk_length
+
+        # Determine the smallest retry block size to use
+        retry_sizes = [bs for bs in self._RETRY_BLOCK_SIZES if bs < chunk_length]
+        if not retry_sizes:
+            # Chunk is already at minimum size — record and zero-pad
+            self._bad_sector_map.record(chunk_offset, chunk_length, original_error, retry_count=0)
+            self._bad_sectors.append({
+                "offset": chunk_offset, "length": chunk_length, "error": original_error,
+            })
+            try:
+                src.seek(chunk_length, os.SEEK_CUR)
+            except (OSError, AttributeError):
+                pass
+            return b"\x00" * chunk_length
+
+        smallest_block = retry_sizes[-1]  # e.g. 512
+
+        # Try to seek back to the start of the failed region
+        try:
+            src.seek(chunk_offset, os.SEEK_SET)
+        except (OSError, AttributeError):
+            # Non-seekable stream (tar/pipe): just zero-pad the whole chunk
+            self._bad_sector_map.record(chunk_offset, chunk_length, original_error, retry_count=0)
+            self._bad_sectors.append({
+                "offset": chunk_offset, "length": chunk_length, "error": original_error,
+            })
+            return b"\x00" * chunk_length
+
+        # Read in smallest-block increments to find exact bad offsets
+        while remaining > 0 and self._is_running:
+            to_read = min(smallest_block, remaining)
+            retry_count = 0
+            max_retries = 3
+            read_ok = False
+
+            while retry_count < max_retries:
+                try:
+                    data = src.read(to_read)
+                    if data:
+                        result.extend(data)
+                        sub_offset += len(data)
+                        remaining -= len(data)
+                        read_ok = True
+                        break
+                    else:
+                        # EOF
+                        remaining = 0
+                        read_ok = True
+                        break
+                except OSError as sub_err:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        # Truly unreadable — zero-pad and log
+                        self._bad_sector_map.record(
+                            sub_offset, to_read, str(sub_err), retry_count=retry_count,
+                        )
+                        self._bad_sectors.append({
+                            "offset": sub_offset, "length": to_read, "error": str(sub_err),
+                        })
+                        result.extend(b"\x00" * to_read)
+                        sub_offset += to_read
+                        remaining -= to_read
+                        read_ok = True
+                        # Skip past the bad region
+                        try:
+                            src.seek(sub_offset, os.SEEK_SET)
+                        except (OSError, AttributeError):
+                            pass
+                        break
+                    # Retry: seek back to the sub-block start
+                    try:
+                        src.seek(sub_offset, os.SEEK_SET)
+                    except (OSError, AttributeError):
+                        break
+
+            if not read_ok:
+                # Fallback: zero-pad remainder
+                self._bad_sector_map.record(
+                    sub_offset, remaining, original_error, retry_count=retry_count,
+                )
+                self._bad_sectors.append({
+                    "offset": sub_offset, "length": remaining, "error": original_error,
+                })
+                result.extend(b"\x00" * remaining)
+                remaining = 0
+
+        # Ensure we return exactly chunk_length bytes
+        if len(result) < chunk_length:
+            result.extend(b"\x00" * (chunk_length - len(result)))
+        return bytes(result[:chunk_length])
+
     # ── Main loop ───────────────────────────────────────────────────
 
     def run(self) -> dict:
@@ -377,18 +501,11 @@ class DeadAcquisitionEngine:
                         try:
                             chunk = src.read(self.CHUNK_SIZE)
                         except OSError as _read_err:
-                            # Pad unreadable sectors with zeros (forensic safe mode)
-                            # Log the bad sector range (ddrescue-style error map)
-                            self._bad_sectors.append({
-                                "offset": total_bytes,
-                                "length": self.CHUNK_SIZE,
-                                "error": str(_read_err),
-                            })
-                            chunk = b"\x00" * self.CHUNK_SIZE
-                            try:
-                                src.seek(self.CHUNK_SIZE, os.SEEK_CUR)
-                            except (OSError, AttributeError):
-                                pass  # pipes/tar streams are not seekable — offset already moved
+                            # DDSecure-style: retry with smaller blocks to
+                            # pinpoint exact bad sector offsets
+                            chunk = self._read_with_granular_retry(
+                                src, total_bytes, self.CHUNK_SIZE, str(_read_err),
+                            )
                     else:
                         chunk = src.read(self.CHUNK_SIZE)
 
@@ -453,22 +570,16 @@ class DeadAcquisitionEngine:
                 else:
                     hash_match = False
 
-            # Write bad-sector error map if any sectors failed
-            error_map_path = None
-            if self._bad_sectors:
-                import json as _json
-                error_map_path = self.output_file + ".error_map.json"
+            # Write DDSecure-style bad-sector error map if any sectors failed
+            error_map_paths = {}
+            if self._bad_sector_map.has_errors():
+                self._bad_sector_map.coalesce()
                 try:
-                    with open(error_map_path, "w", encoding="utf-8") as _emf:
-                        _json.dump({
-                            "source": self.source_path,
-                            "output": self.output_file,
-                            "bad_sector_count": len(self._bad_sectors),
-                            "total_bad_bytes": sum(s["length"] for s in self._bad_sectors),
-                            "sectors": self._bad_sectors,
-                        }, _emf, indent=2)
+                    error_map_paths = self._bad_sector_map.export_all(
+                        self.output_file, device_size=target_bytes,
+                    )
                 except OSError:
-                    error_map_path = None
+                    pass
 
             # Post-acquisition output re-verification (re-read written file)
             output_sha256 = "SKIPPED"
@@ -482,8 +593,10 @@ class DeadAcquisitionEngine:
                 "total_bytes": total_bytes,
                 "source_sha256": source_sha256,
                 "hash_match": hash_match,
-                "bad_sectors": len(self._bad_sectors),
-                "error_map_path": error_map_path,
+                "bad_sectors": self._bad_sector_map.count,
+                "bad_sector_bytes": self._bad_sector_map.total_bad_bytes,
+                "bad_sector_summary": self._bad_sector_map.summary(),
+                "error_map_paths": error_map_paths,
                 "output_sha256": output_sha256,
                 "output_match": output_match,
             }

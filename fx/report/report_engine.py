@@ -17,39 +17,47 @@ except ImportError:
 
 class ReportEngine:
     @staticmethod
-    def _executive_summary(remote_sha256: str, hash_match, audit_hash: str, kernel_seal_success: bool, safe_mode: bool = False) -> str:
+    def _executive_summary(remote_sha256: str, hash_match, audit_hash: str, kernel_seal_success: bool, safe_mode: bool = False, bad_sectors: int = 0) -> str:
         """
         Integrity-aware summary.
         - If remote hash verification is requested and mismatches, summary must reflect failure.
         - If remote hash is skipped, summary should be neutral (local integrity only).
         - If safe_mode is True, note that unreadable sectors were zero-padded.
+        - If bad_sectors > 0, include a warning about unreadable regions.
         """
         seal_str = "SUCCESS" if kernel_seal_success else "FAILED (No Passwordless Sudo)"
         safe_mode_note = " (Note: Unreadable sectors were padded with zeros due to Safe Mode.)" if safe_mode else ""
+        bad_sector_note = ""
+        if bad_sectors > 0:
+            bad_sector_note = (
+                f" WARNING: {bad_sectors} unreadable region(s) detected during acquisition. "
+                "These sectors were zero-padded in the output image. "
+                "Refer to the Bad Sector Error Map for the complete offset list."
+            )
 
         if remote_sha256 == "SKIPPED" or remote_sha256 is None:
             return (
                 "The acquisition process completed. Local integrity hashes (SHA-256/MD5) were computed and recorded. "
-                f"The audit trail was sealed (Audit SHA-256: {audit_hash}). Kernel seal: {seal_str}.{safe_mode_note}"
+                f"The audit trail was sealed (Audit SHA-256: {audit_hash}). Kernel seal: {seal_str}.{safe_mode_note}{bad_sector_note}"
             )
 
         if hash_match is True:
             return (
                 "The acquisition process completed successfully. Source-to-image verification PASSED. "
                 f"Evidence integrity has been verified by matching source and local SHA-256 values. "
-                f"Audit SHA-256: {audit_hash}. Kernel seal: {seal_str}.{safe_mode_note}"
+                f"Audit SHA-256: {audit_hash}. Kernel seal: {seal_str}.{safe_mode_note}{bad_sector_note}"
             )
 
         if hash_match is False:
             return (
                 "The acquisition process completed, but source-to-image verification FAILED. "
                 "Source SHA-256 does NOT match the local SHA-256. Treat this evidence image as NOT VERIFIED. "
-                f"Audit SHA-256: {audit_hash}. Kernel seal: {seal_str}.{safe_mode_note}"
+                f"Audit SHA-256: {audit_hash}. Kernel seal: {seal_str}.{safe_mode_note}{bad_sector_note}"
             )
 
         return (
             "The acquisition process completed. Source hash was collected, but verification status is UNKNOWN. "
-            f"Audit SHA-256: {audit_hash}. Kernel seal: {seal_str}.{safe_mode_note}"
+            f"Audit SHA-256: {audit_hash}. Kernel seal: {seal_str}.{safe_mode_note}{bad_sector_note}"
         )
 
     @staticmethod
@@ -78,6 +86,7 @@ class ReportEngine:
             report_data.get("audit_hash", "UNKNOWN"),
             report_data.get("kernel_seal_success", False),
             report_data.get("safe_mode", False),
+            report_data.get("bad_sectors", 0),
         )
 
         ReportEngine._generate_txt(report_data, summary, txt_path)
@@ -121,6 +130,40 @@ class ReportEngine:
         if d.get("triage_requested") and d.get("dashboard_path"):
             dashboard_note = f"\n\n5. TRIAGE DATA DASHBOARD\n--------------------------\nInteractive Dashboard: {d.get('dashboard_path')}\nView in web browser for detailed charts and statistics.\n"
 
+        # Bad Sector Error Map section
+        bad_sector_note = ""
+        bad_sector_count = d.get("bad_sectors", 0)
+        if bad_sector_count > 0:
+            bad_sector_bytes = d.get("bad_sector_bytes", 0)
+            bad_sector_summary = d.get("bad_sector_summary", "")
+            error_map_paths = d.get("error_map_paths", {})
+            section_num = "6" if d.get("triage_requested") and d.get("dashboard_path") else "5"
+            bad_sector_note = f"""
+
+{section_num}. BAD SECTOR ERROR MAP (DDSecure-style)
+------------------------------------------
+Status           : ⚠ UNREADABLE SECTORS DETECTED
+Bad Regions      : {bad_sector_count}
+Total Bad Bytes  : {bad_sector_bytes:,}
+Summary          : {bad_sector_summary}
+
+Error Map Files:"""
+            if error_map_paths.get("log_path"):
+                bad_sector_note += f"\n  Text Log       : {error_map_paths['log_path']}"
+            if error_map_paths.get("json_path"):
+                bad_sector_note += f"\n  JSON Map       : {error_map_paths['json_path']}"
+            if error_map_paths.get("ddrescue_map_path"):
+                bad_sector_note += f"\n  ddrescue Map   : {error_map_paths['ddrescue_map_path']}"
+            bad_sector_note += """
+
+Note: Unreadable sectors were zero-padded in the output image.
+      The error map files contain byte-level offset lists of all
+      unreadable regions, compatible with ddrescue/DDSecure workflows.
+"""
+        elif d.get("safe_mode"):
+            section_num = "6" if d.get("triage_requested") and d.get("dashboard_path") else "5"
+            bad_sector_note = f"\n\n{section_num}. BAD SECTOR ERROR MAP\n------------------------------------------\nStatus           : ✓ No bad sectors detected\n"
+
         content = f"""
 ================================================================
             DIGITAL FORENSIC ACQUISITION REPORT
@@ -156,6 +199,7 @@ Format Type      : {d.get("format_type")}
 --------------------------
 Live Triage Log  : {triage_status}
 {dashboard_note}
+{bad_sector_note}
 
 EXECUTIVE SUMMARY
 ------------------
@@ -251,6 +295,52 @@ Note: Auto-generated by ForenXtract (FX)
                 pdf.cell(0, 10, "5. TRIAGE DATA DASHBOARD", ln=1)
                 pdf.set_font("helvetica", "", 11)
                 pdf.multi_cell(0, 6, f"Interactive HTML Dashboard: {d.get('dashboard_path')}\n\nOpen the HTML file in a web browser to view detailed interactive charts and statistics including process analysis, network connections, and memory usage.")
+
+            # Bad Sector Error Map section
+            bad_sector_count = d.get("bad_sectors", 0)
+            if bad_sector_count > 0 or d.get("safe_mode"):
+                pdf.ln(4)
+                pdf.set_font("helvetica", "B", 12)
+                section_title = "BAD SECTOR ERROR MAP (DDSecure-style)"
+                pdf.cell(0, 10, section_title, ln=1)
+
+                if bad_sector_count > 0:
+                    pdf.set_font("helvetica", "B", 11)
+                    pdf.set_text_color(200, 0, 0)  # Red
+                    pdf.cell(0, 8, f"WARNING: {bad_sector_count} UNREADABLE REGION(S) DETECTED", ln=1)
+                    pdf.set_text_color(0, 0, 0)  # Reset
+
+                    pdf.set_font("helvetica", "", 11)
+                    bad_sector_bytes = d.get("bad_sector_bytes", 0)
+                    row("Bad Regions:", str(bad_sector_count))
+                    row("Total Bad Bytes:", f"{bad_sector_bytes:,}")
+                    row("Summary:", d.get("bad_sector_summary", ""))
+
+                    error_map_paths = d.get("error_map_paths", {})
+                    if error_map_paths:
+                        pdf.ln(2)
+                        pdf.set_font("helvetica", "B", 10)
+                        pdf.cell(0, 8, "Error Map Files:", ln=1)
+                        pdf.set_font("courier", "", 9)
+                        if error_map_paths.get("log_path"):
+                            pdf.cell(0, 6, f"  Text Log    : {error_map_paths['log_path']}", ln=1)
+                        if error_map_paths.get("json_path"):
+                            pdf.cell(0, 6, f"  JSON Map    : {error_map_paths['json_path']}", ln=1)
+                        if error_map_paths.get("ddrescue_map_path"):
+                            pdf.cell(0, 6, f"  ddrescue Map: {error_map_paths['ddrescue_map_path']}", ln=1)
+
+                    pdf.set_font("helvetica", "I", 10)
+                    pdf.ln(2)
+                    pdf.multi_cell(0, 5,
+                        "Unreadable sectors were zero-padded in the output image. "
+                        "The error map files contain byte-level offset lists compatible "
+                        "with ddrescue/DDSecure forensic workflows."
+                    )
+                else:
+                    pdf.set_font("helvetica", "", 11)
+                    pdf.set_text_color(0, 128, 0)  # Green
+                    pdf.cell(0, 8, "No bad sectors detected.", ln=1)
+                    pdf.set_text_color(0, 0, 0)
 
             pdf.ln(6)
             pdf.set_font("helvetica", "B", 12)

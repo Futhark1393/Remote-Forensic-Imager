@@ -112,13 +112,15 @@ def cli_progress(data: dict) -> None:
     eta = data.get("eta", "")
     md5 = data.get("md5_current", "")
     bytes_read = data.get("bytes_read", 0)
+    bad_count = data.get("bad_sector_count", 0)
 
     mb_read = bytes_read / (1024 * 1024)
     bar_len = 30
     filled = int(bar_len * pct / 100)
     bar = "█" * filled + "░" * (bar_len - filled)
 
-    line = f"\r  [{bar}] {pct:3d}% | {mb_read:,.0f} MB | {speed:.1f} MB/s | ETA: {eta}"
+    bad_str = f" | \033[1;31mBAD:{bad_count}\033[0m" if bad_count > 0 else ""
+    line = f"\r  [{bar}] {pct:3d}% | {mb_read:,.0f} MB | {speed:.1f} MB/s | ETA: {eta}{bad_str}"
     sys.stdout.write(line)
     sys.stdout.flush()
 
@@ -377,6 +379,32 @@ def main() -> int:
     print(f"  Local SHA-256: {sha256}")
     print(f"  Local MD5    : {md5}")
 
+    # ── Bad Sector Summary (DDSecure-style) ──────────────────────────
+    bad_sectors = result.get("bad_sectors", 0)
+    bad_sector_bytes = result.get("bad_sector_bytes", 0)
+    bad_sector_summary = result.get("bad_sector_summary", "")
+    error_map_paths = result.get("error_map_paths", {})
+
+    if bad_sectors > 0:
+        print(f"\n  \033[1;31m⚠ BAD SECTORS DETECTED\033[0m")
+        print(f"  Bad Regions  : {bad_sectors}")
+        print(f"  Bad Bytes    : {bad_sector_bytes:,}")
+        print(f"  Summary      : {bad_sector_summary}")
+        if error_map_paths:
+            print(f"  Error Map Files:")
+            if error_map_paths.get("log_path"):
+                print(f"    Text Log   : {error_map_paths['log_path']}")
+            if error_map_paths.get("json_path"):
+                print(f"    JSON Map   : {error_map_paths['json_path']}")
+            if error_map_paths.get("ddrescue_map_path"):
+                print(f"    ddrescue   : {error_map_paths['ddrescue_map_path']}")
+        logger.log(
+            f"Bad sectors detected: {bad_sectors} region(s), {bad_sector_bytes:,} bytes",
+            "WARNING", "BAD_SECTORS_DETECTED", source_module="cli",
+        )
+    elif safe_mode:
+        print(f"  Bad Sectors  : \033[0;32m✓ None detected\033[0m")
+
     logger.log("Acquisition completed.", "INFO", "INTEGRITY_LOCAL", source_module="cli", hash_context={
         "local_sha256": sha256,
         "local_md5": md5,
@@ -462,6 +490,10 @@ def main() -> int:
         "kernel_seal_success": chattr_success,
         "output_sha256": output_sha256,
         "output_match": output_match,
+        "bad_sectors": bad_sectors,
+        "bad_sector_bytes": bad_sector_bytes,
+        "bad_sector_summary": bad_sector_summary,
+        "error_map_paths": error_map_paths,
         "txt_path": txt_path,
         "pdf_path": pdf_path,
     }
