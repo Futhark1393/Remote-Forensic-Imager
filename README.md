@@ -11,7 +11,7 @@ ForenXtract (FX) is a **case-first forensic disk acquisition framework** built w
 - **Tamper-evident JSONL audit trail** with cryptographic hash chaining + optional Ed25519 signing
 - **Interactive CLI wizard** (`fx-acquire -i`) — step-by-step guided acquisition, no flags to memorize
 - **DDSecure-style bad sector error map** — granular offset list of unreadable sectors (text log + JSON + ddrescue mapfile)
-- **Split Image support** — `--split-size 2G` splits output into FAT32/DVD-safe segments (`.001`, `.002`, …)
+- **Split Image support** — split output into FAT32/DVD-safe segments via GUI checkbox or CLI `--split-size 2G`
 - **Real-time input validation** in GUI with visual feedback
 - Four output formats: **RAW**, **RAW+LZ4**, **E01**, **AFF4**
 - Live triage (network, processes, memory) with **interactive HTML dashboard**
@@ -400,7 +400,7 @@ fx-acquire --dead --source /dev/sdb --output-dir ./evidence \
   --split-size 2G
 ~~~
 
-The interactive wizard (`fx-acquire -i`) also offers preset sizes:
+The interactive wizard (`fx-acquire -i`) also offers preset sizes, and the **GUI** has a **Split Image** checkbox with an editable combo (presets: 2G / 650M / 4G / 1G + custom):
 
 | Preset | Size | Use Case |
 |--------|------|----------|
@@ -416,6 +416,9 @@ The interactive wizard (`fx-acquire -i`) also offers preset sizes:
 - All other formats use FX's `SplitWriter` wrapper that transparently rotates files at the segment boundary
 - **Stream hashing** (SHA-256 / MD5) covers the entire raw data stream across all segments
 - Segment count and paths are recorded in the forensic report (TXT + PDF)
+- **GUI**: Split Image checkbox + editable segment size combo (presets + custom input)
+- **CLI**: `--split-size SIZE` flag
+- **Interactive wizard**: preset chooser with custom entry option
 
 > [!NOTE]
 > When splitting is active, the output re-verification step (single-file SHA-256) is skipped since the image spans multiple files. Stream-level integrity is still preserved.
