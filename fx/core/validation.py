@@ -69,6 +69,19 @@ def validate_siem_config(
     return True, "", port
 
 
+def format_bytes(size_bytes: int) -> str:
+    """Format a byte count into a human-readable string (e.g., '500.00 GB')."""
+    if size_bytes < 0:
+        return "Unknown"
+    for unit in ("B", "KB", "MB", "GB", "TB", "PB"):
+        if abs(size_bytes) < 1024.0 or unit == "PB":
+            if unit == "B":
+                return f"{size_bytes} {unit}"
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.2f} PB"
+
+
 def build_evidence_filename(
     output_dir: str, case_no: str, format_type: str, timestamp_str: str
 ) -> str:

@@ -88,6 +88,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--notes", default="", help="E01 header: examiner notes (embedded in E01 metadata)")
     p.add_argument("--split-size", default="", help="Split image into segments of this size (e.g., 2G, 4G, 650M). FAT32 safe: 2G")
 
+    # Confirmation
+    p.add_argument("-y", "--yes", action="store_true", help="Skip pre-acquisition confirmation prompt")
+
     # Optional — triage
     p.add_argument("--triage", action="store_true", help="Run live triage (network + processes) before acquisition")
     p.add_argument("--triage-network", action="store_true", default=True, help="Triage: collect network state (default: on with --triage)")
@@ -306,6 +309,45 @@ def main() -> int:
         f"Format: {args.format} | Verify: {args.verify} | Safe: {safe_mode} | WriteBlock: {args.write_blocker}",
         "INFO", "ACQUISITION_PARAMS", source_module="cli",
     )
+
+    # ── Pre-acquisition confirmation ─────────────────────────────────
+    if not getattr(args, "yes", False):
+        from fx.core.validation import format_bytes
+        confirm_size_str = "unknown size"
+        try:
+            if is_dead:
+                from fx.core.acquisition.dead import _get_source_size
+                _confirm_bytes = _get_source_size(args.source)
+                confirm_size_str = format_bytes(_confirm_bytes)
+            else:
+                import paramiko as _pmk
+                from fx.core.policy import ssh_exec as _ssh_exec_confirm
+                _ssh_confirm = _pmk.SSHClient()
+                _ssh_confirm.set_missing_host_key_policy(_pmk.WarningPolicy())
+                try:
+                    _ssh_confirm.connect(args.ip, username=args.user, key_filename=args.key, timeout=10)
+                    _out, _err, _code = _ssh_exec_confirm(_ssh_confirm, f"sudo -n blockdev --getsize64 {args.disk}")
+                    if _code == 0 and _out.strip().isdigit():
+                        confirm_size_str = format_bytes(int(_out.strip()))
+                finally:
+                    _ssh_confirm.close()
+        except Exception:
+            pass  # size detection is best-effort; confirmation still shown
+
+        target_label = args.source if is_dead else f"{args.user}@{args.ip}:{args.disk}"
+        print(f"\n  {C3}⚠  PRE-ACQUISITION CONFIRMATION{C0}")
+        print(f"  {C3}Target:{C0}  {target_label}")
+        print(f"  {C3}Size:{C0}    {confirm_size_str}")
+        print(f"  {C3}Format:{C0}  {args.format}")
+        print(f"  {C3}Output:{C0}  {output_dir}")
+        try:
+            answer = input(f"\n  Proceed with acquisition? [Y/n]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Aborted by user.")
+            return 130
+        if answer and answer not in ("y", "yes"):
+            print("  Aborted.")
+            return 0
 
     # ── Build output filename ────────────────────────────────────────
     timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")

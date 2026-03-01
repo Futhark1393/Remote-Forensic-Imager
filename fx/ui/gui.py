@@ -894,6 +894,39 @@ class ForensicApp(QMainWindow):
         # Always pass a concrete first segment filename for E01.
         output_file = self.target_filename
 
+        # ── Pre-acquisition confirmation ──────────────────────────────
+        try:
+            import paramiko as _pmk
+            from fx.core.policy import ssh_exec as _ssh_exec_confirm
+            from fx.core.validation import format_bytes
+            _ssh_c = _pmk.SSHClient()
+            _ssh_c.set_missing_host_key_policy(_pmk.WarningPolicy())
+            _ssh_c.connect(ip, username=user, key_filename=key, timeout=10)
+            _out, _err, _code = _ssh_exec_confirm(
+                _ssh_c, f"sudo -n blockdev --getsize64 {disk}")
+            _ssh_c.close()
+            _sz_str = format_bytes(int(_out.strip())) if _code == 0 and _out.strip().isdigit() else "unknown size"
+        except Exception:
+            _sz_str = "unknown size"
+
+        reply = QMessageBox.question(
+            self,
+            "Pre-Acquisition Confirmation",
+            f"Target: {user}@{ip}:{disk}\n"
+            f"Size: {_sz_str}\n"
+            f"Format: {self.format_type}\n"
+            f"Output: {evidence_dir}\n\n"
+            f"Proceed with acquisition?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            try:
+                self.session.abort()
+            except SessionStateError:
+                pass
+            return
+
         # ── UI state ──────────────────────────────────────────────────
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
@@ -915,6 +948,10 @@ class ForensicApp(QMainWindow):
             )
 
         # Log E01 metadata if applicable
+        # E01 metadata (description + notes) — read early for logging
+        e01_description = self.txt_e01_description.text().strip() if hasattr(self, "txt_e01_description") else ""
+        e01_notes = self.txt_e01_notes.text().strip() if hasattr(self, "txt_e01_notes") else ""
+
         if self.format_type == "E01":
             e01_desc_preview = e01_description[:60] if e01_description else "(empty)"
             e01_notes_preview = e01_notes[:60] if e01_notes else "(empty)"
@@ -926,9 +963,6 @@ class ForensicApp(QMainWindow):
             self.log(f"Split Image → {format_split_size(self._split_size)} per segment", "INFO", "SPLIT_IMAGE")
 
         # ── Launch worker ─────────────────────────────────────────────
-        # E01 metadata (description + notes)
-        e01_description = self.txt_e01_description.text().strip() if hasattr(self, "txt_e01_description") else ""
-        e01_notes = self.txt_e01_notes.text().strip() if hasattr(self, "txt_e01_notes") else ""
 
         self.worker = AcquisitionWorker(
             ip=ip,
@@ -1071,6 +1105,32 @@ class ForensicApp(QMainWindow):
         base_filename = os.path.join(evidence_dir, f"evidence_{self.case_no}_{timestamp_str}")
         self.target_filename = base_filename + ext
         output_file = self.target_filename
+
+        # ── Pre-acquisition confirmation ──────────────────────────────
+        try:
+            from fx.core.acquisition.dead import _get_source_size
+            from fx.core.validation import format_bytes
+            _sz_str = format_bytes(_get_source_size(source_path))
+        except Exception:
+            _sz_str = "unknown size"
+
+        reply = QMessageBox.question(
+            self,
+            "Pre-Acquisition Confirmation",
+            f"Source: {source_path}\n"
+            f"Size: {_sz_str}\n"
+            f"Format: {self.format_type}\n"
+            f"Output: {evidence_dir}\n\n"
+            f"Proceed with acquisition?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            try:
+                self.session.abort()
+            except SessionStateError:
+                pass
+            return
 
         # ── UI state ──────────────────────────────────────────────────
         self.btn_start.setEnabled(False)

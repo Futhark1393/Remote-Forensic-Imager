@@ -12,6 +12,7 @@ ForenXtract (FX) is a **case-first forensic disk acquisition framework** built w
 - **Interactive CLI wizard** (`fx-acquire -i`) — step-by-step guided acquisition, no flags to memorize
 - **DDSecure-style bad sector error map** — granular offset list of unreadable sectors (text log + JSON + ddrescue mapfile)
 - **Split Image support** — split output into FAT32/DVD-safe segments via GUI checkbox or CLI `--split-size 2G`
+- **Pre-acquisition confirmation** — shows target, size, format, and output path before starting (CLI, interactive wizard, and GUI)
 - **Real-time input validation** in GUI with visual feedback
 - Four output formats: **RAW**, **RAW+LZ4**, **E01**, **AFF4**
 - Live triage (network, processes, memory) with **interactive HTML dashboard**
@@ -293,6 +294,7 @@ Walks through all parameters interactively with defaults, validation, and tab co
 | `--description TEXT` | E01 header: evidence description |
 | `--notes TEXT` | E01 header: examiner notes |
 | `--split-size SIZE` | Split image into segments (e.g., `2G`, `4G`, `650M`) |
+| `-y`, `--yes` | Skip the pre-acquisition confirmation prompt |
 
 ### Triage Parameters (Live Mode Only)
 
@@ -620,13 +622,17 @@ fx/
 python -m pytest tests/ -v
 ~~~
 
-**163 unit tests** across 3 modules — all optional-dependency tests use `unittest.mock.patch` (zero skips regardless of installed packages):
+**251 unit tests** across 7 modules — all optional-dependency tests use `unittest.mock.patch` (zero skips regardless of installed packages):
 
 | Module | Tests | Coverage |
 |--------|------:|----------|
 | `test_core.py` | 78 | Session state machine, StreamHasher, writers (RAW/LZ4/EWF/AFF4), dd builder, validators, audit chain, logger, signing, syslog, reports |
 | `test_triage.py` | 23 | All collectors (processes, network, memory), orchestrator, error isolation |
 | `test_acquisition.py` | 62 | SSH, write-blocker, verification, live/dead engines, directory acquisition, pkexec elevation, format writers, injection prevention, bad sector map |
+| `test_gui.py` | 16 | CaseWizard validation, format/ext routing, live/dead tab routing, E01 metadata bug regression, pre-acquisition confirmation dialog, progress UI |
+| `test_cli.py` | 34 | `format_bytes`, argparse flags, cli_progress output, main() integration (dead mode), pre-acquisition confirmation prompt, interactive wizard helpers |
+| `test_dashboard.py` | 24 | Dashboard init, process/network/memory chart generation, full HTML output, plotly/matplotlib helpers, edge cases (missing data, malformed JSON) |
+| `test_edge_cases.py` | 14 | Safe mode termination (all-bad-sectors, granular retry, stop flag, non-seekable stream), concurrent audit writes, hash chain integrity, double-seal immutability |
 
 ![Tests](screenshots/cli_tests.png)
 

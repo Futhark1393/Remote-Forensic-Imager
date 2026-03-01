@@ -418,6 +418,36 @@ def run_interactive_wizard() -> dict:
     # ── Summary ──────────────────────────────────────────────────────
     _print_summary(params)
 
+    # Show source size in confirmation
+    _confirm_size_str = "Detecting..."
+    try:
+        if is_dead:
+            from fx.core.acquisition.dead import _get_source_size
+            from fx.core.validation import format_bytes
+            _sz = _get_source_size(params["source"])
+            _confirm_size_str = format_bytes(_sz)
+        else:
+            import paramiko as _pmk
+            from fx.core.policy import ssh_exec
+            from fx.core.validation import format_bytes
+            _ssh = _pmk.SSHClient()
+            _ssh.set_missing_host_key_policy(_pmk.WarningPolicy())
+            try:
+                _ssh.connect(params["ip"], username=params["user"],
+                             key_filename=params["key"], timeout=10)
+                _out, _err, _code = ssh_exec(_ssh,
+                    f"sudo -n blockdev --getsize64 {params['disk']}")
+                if _code == 0 and _out.strip().isdigit():
+                    _confirm_size_str = format_bytes(int(_out.strip()))
+                else:
+                    _confirm_size_str = "unknown"
+            finally:
+                _ssh.close()
+    except Exception:
+        _confirm_size_str = "unknown"
+
+    print(f"\n  {YELLOW}Source size: {WHITE}{_confirm_size_str}{C0}")
+
     confirm = _prompt_bool(f"\n  {GREEN}Proceed with acquisition?{C0}", default=True)
     if not confirm:
         print(f"\n  {YELLOW}Aborted.{C0}\n")
